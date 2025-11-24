@@ -1,0 +1,156 @@
+import time
+import can
+import cantools
+
+class CANBusIO:
+    def __init__(self, 
+                 can_channel="can0", 
+                 db_path="modules/can-messages-mini-celka/can_messages_mini_celka.dbc",
+                 debug=False
+                 ):
+
+        self.db_path = db_path
+        self.db = cantools.database.load_file(self.db_path) # Load DBC file
+
+        # These are the messages we decode (names from the DBC)
+        self.INPUT_MESSAGES = [
+            "RADIO_CONTROL",
+            "ACCELEROMETER",
+            "GYROSCOPE",
+            "DISTANCE_FORE_FEEDBACK",
+            "DISTANCE_ACHTER_FEEDBACK",           
+        ]
+
+        # Mapping: (message_name, signal_name) -> boat_state_key
+        self.SIGNAL_MAP = {
+            ("RADIO_CONTROL", "THROTTLE")       : "RADIO_THROTTLE",
+            ("RADIO_CONTROL", "STEERING")       : "RADIO_STEERING",
+            ("RADIO_CONTROL", "FRONT_PITCH")    : "RADIO_FRONT_PITCH",
+            ("RADIO_CONTROL", "ARM_SWITCH")     : "RADIO_ARM_SWITCH",
+            ("RADIO_CONTROL", "MODE_SWITCH")    : "RADIO_MODE_SWITCH",
+
+            ("ACCELEROMETER", "AX"): "ACCELEROMETER_X",
+            ("ACCELEROMETER", "AY"): "ACCELEROMETER_Y",
+            ("ACCELEROMETER", "AZ"): "ACCELEROMETER_Z",
+
+            ("GYROSCOPE", "GX"): "GYROSCOPE_X",
+            ("GYROSCOPE", "GY"): "GYROSCOPE_Y",
+            ("GYROSCOPE", "GZ"): "GYROSCOPE_Z",
+
+            ("DISTANCE_FORE_FEEDBACK", "RANGE_MM_L") : "DISTANCE_FORE_LEFT",
+            ("DISTANCE_FORE_FEEDBACK", "RANGE_MM_R") : "DISTANCE_FORE_RIGHT",
+
+            ("DISTANCE_ACHTER_FEEDBACK", "RANGE_MM_L") : "DISTANCE_ACHTER_LEFT",
+            ("DISTANCE_ACHTER_FEEDBACK", "RANGE_MM_R") : "DISTANCE_ACHTER_RIGHT",
+        }
+
+        if not debug:
+            # Prepare decoder: frame_id -> dbc message object
+            self.in_messages = {}
+            for name in self.INPUT_MESSAGES:
+                msg = self.db.get_message_by_name(name)
+                self.in_messages[msg.frame_id] = msg
+
+            # Unified boat state initialization
+            self.boat_state = {key: 0 for key in self.SIGNAL_MAP.values()}
+            self.boat_state["timestamp"] = time.monotonic()
+
+            # CAN bus
+            self.bus = can.interface.Bus(channel=can_channel, bustype="socketcan")
+
+    # ----------------------------------------------------------------------
+
+    def process_incoming(self, msg):
+        """Decode incoming CAN frames and update boat_state."""
+        if msg.arbitration_id not in self.in_messages:
+            return
+
+        dbc_msg = self.in_messages[msg.arbitration_id]
+
+        try:
+            decoded = dbc_msg.decode(msg.data)
+        except Exception:
+            return
+
+        msg_name = dbc_msg.name
+
+        # Map decoded signals to boat_state
+        for sig_name, val in decoded.items():
+            key = self.SIGNAL_MAP.get((msg_name, sig_name))
+            if key:
+                self.boat_state[key] = val
+
+        self.boat_state["timestamp"] = time.monotonic()
+
+    # ----------------------------------------------------------------------
+
+    def get_state(self):
+        """Return current boat_state."""
+        return dict(self.boat_state)
+
+    # ----------------------------------------------------------------------
+    # GENERIC ENCODER/SENDER
+    # ----------------------------------------------------------------------
+    def send_message(self, message_name: str, **signals):
+        """
+        Generic CAN sender using DBC message name.
+        Example:
+            send_message("AUTO_CONTROL", FRONT_LEFT_SETPOINT=10, ...)
+        """
+        try:
+            msg = self.db.get_message_by_name(message_name)
+            data = msg.encode(signals)
+
+            frame = can.Message(
+                arbitration_id=msg.frame_id,
+                data=data,
+                is_extended_id=False
+            )
+            self.bus.send(frame)
+
+        except Exception as e:
+            print(f"[WARN] Failed to send {message_name}: {e}")
+
+    # ----------------------------------------------------------------------
+    # SPECIFIC API FOR MESSAGES
+    # ----------------------------------------------------------------------
+    def send_AUTO_CONTROL(self, 
+                          FRONT_LEFT_SETPOINT, 
+                          FRONT_RIGHT_SETPOINT, 
+                          REAR_SETPOINT, 
+                          PADDING=0):
+        
+        self.send_message(
+            "AUTO_CONTROL",
+            FRONT_LEFT_SETPOINT=FRONT_LEFT_SETPOINT,
+            FRONT_RIGHT_SETPOINT=FRONT_RIGHT_SETPOINT,
+            REAR_SETPOINT=REAR_SETPOINT,
+            PADDING=PADDING,
+        )
+
+
+# ----------------------------------------------------------------------
+# SIMPLE DBC INSPECTOR / DEBUG UTILITY
+# ----------------------------------------------------------------------
+if __name__ == "__main__":
+    print("=== CANBusIO Simple DBC inspector / debug utility ===")
+
+    try:
+        # Use the class
+        bus_io = CANBusIO(debug=True)
+        db = bus_io.db
+    except Exception as e:
+        print(f"Failed to load DBC: {e}")
+        exit(1)
+
+    print("\nAvailable messages in DBC:")
+    for msg in db.messages:
+        print(f" - {msg.name}  (0x{msg.frame_id:X})")
+
+    print("\nSignals in each message:")
+    for msg in db.messages:
+        print(f"\nMessage: {msg.name}  [0x{msg.frame_id:X}]")
+        for sig in msg.signals:
+            print(f"   - {sig.name}  ({sig.start} bit, {sig.length} bits)")
+
+    print("\nDone.")
