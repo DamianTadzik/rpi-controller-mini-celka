@@ -1,0 +1,3 @@
+[submodule "modules/can-messages-mini-celka"]
+	path = modules/can-messages-mini-celka
+	url = https://github.com/DamianTadzik/can-messages-mini-celka.git
