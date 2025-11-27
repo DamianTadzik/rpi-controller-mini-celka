@@ -3,6 +3,7 @@ import time
 import signal
 
 from can_bus_io import CANBusIO
+from telemetry import Telemetry
 
 # MANUAL controller (MODE = 1)
 from controllers import manual_controller as manual_controller
@@ -21,14 +22,14 @@ def main():
     signal.signal(signal.SIGINT, stop)
 
     can_io = CANBusIO()
+    telemetry = Telemetry(ip="255.255.255.255", port=9870, rate_hz=50)
 
     # Default mode = MANUAL
-    ctrl = manual_controller
-    ctrl_state = ctrl.init_controller()
+    controller = manual_controller
+    controller_state = controller.init_controller()
     last_mode = None
-
     # Initialize controller timing
-    last_ctrl_run = 0.0
+    last_controller_run = 0.0
 
     while running:
         # -------------------------------------------------------
@@ -43,12 +44,12 @@ def main():
         # -------------------------------------------------------
         # Read state
         # -------------------------------------------------------
-        state = can_io.get_state()
-        ARM = state["RADIO_ARM_SWITCH"]
-        MODE = state["RADIO_MODE_SWITCH"]
+        inputs = can_io.get_state()
+        ARM = inputs["RADIO_ARM_SWITCH"]
+        MODE = inputs["RADIO_MODE_SWITCH"]
 
         # -------------------------------------------------------
-        # ARMED?
+        # Armed check
         # -------------------------------------------------------
         if ARM not in (1, 2):
             # DISARMED → no control output
@@ -60,24 +61,27 @@ def main():
         # -------------------------------------------------------
         if MODE != last_mode:
             if MODE == 1:
-                ctrl = manual_controller
+                controller = manual_controller
             elif MODE == 2:
-                ctrl = auto_controller
+                controller = auto_controller
             else:
-                ctrl = manual_controller  # default fallback
+                controller = manual_controller  # default fallback
 
-            ctrl_state = ctrl.init_controller()
             last_mode = MODE
-            last_ctrl_run = time.monotonic()  # reset timing
+            last_controller_run = time.monotonic()  # reset timing
+
+            # Init controller state
+            controller_state = controller.init_controller()
 
         # -------------------------------------------------------
         # Periodic controller execution (controller-defined DT)
         # -------------------------------------------------------
         now = time.monotonic()
-        if now - last_ctrl_run >= ctrl.DT:
-            last_ctrl_run = now
+        if now - last_controller_run >= controller.DT:
+            last_controller_run = now
 
-            ctrl_state, outputs = ctrl.step_controller(ctrl_state, state)
+            # Step controller
+            controller_state, outputs = controller.step_controller(controller_state, inputs)
 
             # -------------------------------------------------------
             # Send actuator data (if controller produced any)
@@ -91,8 +95,18 @@ def main():
                     PADDING=o.get("PADDING", 0),
                 )
 
-        # Small sleep to reduce CPU load (optional)
+            # -------------------------------------------------------
+            # Telemetry
+            # -------------------------------------------------------
+            telemetry.push("inputs", inputs)
+            telemetry.push("outputs", outputs) 
+            telemetry.push(f"{controller.NAME}", controller_state)
+
+        # Small sleep to reduce CPU load
         time.sleep(0.0001)
+    
+    # Cleanup after exiting main loop
+    telemetry.stop() 
         
 if __name__ == "__main__":
     main()

@@ -1,7 +1,7 @@
 # ============================================================================
-#  MANUAL CONTROLLER
+#  FIRST PID CONTROLLER
 #  --------------------
-#  This is a simple manual controller
+#  This is a simple controller
 #
 #  Controllers define:
 #       - DT:     update period (seconds)
@@ -28,8 +28,6 @@
 # Controller update rate (seconds)
 # Example: 0.01 → 100 Hz controller
 DT = 0.01
-# Controller name
-NAME = "manual_controller"
 
 
 def init_controller():
@@ -49,7 +47,9 @@ def init_controller():
     """
 
     state = {
-        # manual controller does not have internal state
+        "last_error": 0.0,
+        "integrator": 0.0,
+        "timestamp": 0.0,
     }
 
     return state
@@ -85,9 +85,9 @@ def step_controller(state, inputs):
         Example:
             outputs = {
                 "AUTO_CONTROL": {
-                    "FRONT_LEFT_SETPOINT":  1,
-                    "FRONT_RIGHT_SETPOINT": 2,
-                    "REAR_SETPOINT":        -2,
+                    "FRONT_LEFT_SETPOINT":  300,
+                    "FRONT_RIGHT_SETPOINT": 300,
+                    "REAR_SETPOINT":        512,
                     "PADDING":              0,
                 }
             }
@@ -95,46 +95,47 @@ def step_controller(state, inputs):
         If no outputs are produced:
             return state, {}
     """
-
-    def map(x, in_min, in_max, out_min, out_max):
-        # Linear mapping from one range to another
-        return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min
-    
     def saturate(x, x_min, x_max):
         # Saturate x to [x_min, x_max]
         return max(min(x, x_max), x_min)
 
+    # Read input values
+    radio_pitch = inputs["RADIO_FRONT_PITCH"]
 
-    # Read inputs from controller
-    radio_front_pitch = inputs.get("RADIO_FRONT_PITCH", 0)
-    radio_front_roll = inputs.get("RADIO_STEERING", 0)
-    radio_rear_pitch = inputs.get("RADIO_REAR_PITCH", 0)
+    FL_distance = inputs["DISTANCE_FORE_LEFT"]
+    FR_distance = inputs["DISTANCE_FORE_RIGHT"]
 
-    # Compute control signals for front foils
-    gain_pitch = 1000
-    gain_roll = 1000
-    # left = pitch + roll
-	# right = pitch - roll
-    left_setpoint = (gain_pitch * radio_front_pitch + gain_roll * radio_front_roll) / 1000
-    right_setpoint = (gain_pitch * radio_front_pitch - gain_roll * radio_front_roll) / 1000
-    rear_setpoint = radio_rear_pitch
+    AL_distance = inputs["DISTANCE_ACHTER_LEFT"]
+    AR_distance = inputs["DISTANCE_ACHTER_RIGHT"]
+    ## ?????? how do i know if reading is correct XD
 
-    # Saturate control signals to [-1000, 1000]
-    left_setpoint = saturate(left_setpoint, -1000, 1000)
-    right_setpoint = saturate(right_setpoint, -1000, 1000)
-    rear_setpoint = saturate(rear_setpoint, -1000, 1000)
+   
+    # Setpoint
+    heave_setpoint = 100 # mm  
 
-    # Scale to -6 +12 degrees
-    left_setpoint = map(left_setpoint, -1000, 1000, -6, 12)
-    right_setpoint = map(right_setpoint, -1000, 1000, -6, 12)
-    rear_setpoint = map(rear_setpoint, -1000, 1000, -6, 12)
 
-    # Write outputs to CAN message structure
+    # Alghoritm 
+    #   Rear wing control
+    rear_distance = (AL_distance + AR_distance) / 2.0
+    rear_error = heave_setpoint - rear_distance
+
+    rear_control = 0.1 * rear_error
+
+    #   Front left wing control
+    front_left_error = heave_setpoint - FL_distance
+    front_left_control = 0.1 * front_left_error + radio_pitch 
+
+    #   Front right wing control
+    front_right_error = heave_setpoint - FR_distance    
+    front_right_control = 0.1 * front_right_error + radio_pitch
+
+
+    # Output
     outputs = {
         "AUTO_CONTROL": {
-            "FRONT_LEFT_SETPOINT":  left_setpoint,
-            "FRONT_RIGHT_SETPOINT": right_setpoint,
-            "REAR_SETPOINT":        rear_setpoint,
+            "FRONT_LEFT_SETPOINT":  saturate(front_left_control, -6, +12),
+            "FRONT_RIGHT_SETPOINT": saturate(front_right_control, -6, +12),
+            "REAR_SETPOINT":        saturate(rear_control, -6, +12),
             "PADDING":              0,
         }
     }
