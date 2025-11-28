@@ -107,7 +107,7 @@ def step_controller(state, inputs):
 
     # Read inputs from controller
     radio_front_pitch = inputs.get("RADIO_FRONT_PITCH", 0)
-    radio_front_roll = inputs.get("RADIO_STEERING", 0)
+    radio_front_roll = inputs.get("RADIO_FRONT_ROLL", 0)
     radio_rear_pitch = inputs.get("RADIO_REAR_PITCH", 0)
 
     # Compute control signals for front foils
