@@ -3,6 +3,41 @@ import time
 import msgpack
 import threading
 import os
+import psutil
+
+
+def get_system_metrics():
+    # CPU %
+    cpu = psutil.cpu_percent(interval=None)
+
+    # RAM %
+    mem = psutil.virtual_memory().percent
+
+    # CPU temp
+    try:
+        with open("/sys/class/thermal/thermal_zone0/temp") as f:
+            temp = int(f.read()) / 1000.0
+    except:
+        temp = None
+
+    # WiFi RSSI
+    try:
+        with open("/proc/net/wireless") as f:
+            lines = f.readlines()
+            if len(lines) >= 3:
+                parts = lines[2].split()
+                wifi = float(parts[3])  # dBm
+            else:
+                wifi = None
+    except:
+        wifi = None
+
+    return {
+        "cpu_percent": cpu,
+        "mem_percent": mem,
+        "cpu_temp_c": temp,
+        "wifi_signal_dbm": wifi,
+    }
 
 
 class Telemetry:
@@ -20,6 +55,7 @@ class Telemetry:
     def __init__(self, rate_hz=30, ip="255.255.255.255", port=9870):
         self.rate_hz = rate_hz
         self.period = 1.0 / rate_hz
+        self.system_metrics_sample_period = 1.0 # seconds
         self.addr = (ip, port)
 
         self.enabled = False
@@ -87,6 +123,7 @@ class Telemetry:
     # ----------------------------------------------------------------------
     def _loop(self):
         last_retry = 0.0
+        last_system_metrics_sample = 0.0
 
         while self._running:
             now = time.time()
@@ -111,11 +148,16 @@ class Telemetry:
                 frame = self._frame
                 self._frame = {}
 
+            # Obtain system metrics once per some time
+            if now - last_system_metrics_sample > self.system_metrics_sample_period:
+                frame["system_metrics"] = get_system_metrics()
+                last_system_metrics_sample = now
+
+            # Build, pack, and send packet
             packet = {
                 "timestamp": now,
-                "tele": frame,
+                "brzanpi": frame,
             }
-
             try:
                 bin_packet = msgpack.packb(packet, use_bin_type=True)
                 self.sock.sendto(bin_packet, self.addr)
