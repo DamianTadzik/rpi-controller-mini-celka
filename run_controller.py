@@ -81,8 +81,11 @@ def main():
         elapsed = now - last_controller_run
         if elapsed >= controller.DT:
             last_controller_run += controller.DT
-            telemetry.accum_rt_jitter(elapsed - controller.DT) # TELEMETRY: accumulate jitter
 
+            telemetry.accum_rt_jitter(elapsed - controller.DT) # TELEMETRY: accumulate jitter
+            cycles = int(elapsed // controller.DT)
+            if cycles > 1:
+                telemetry.flag_rt_missed_cycle(cycles - 1)
             controller_start = time.monotonic()  # TELEMETRY: measure controller time
 
             # Step controller

@@ -188,7 +188,7 @@ class Telemetry:
                 controller_metrics["max_ctrl_time_us"] = self._rt_ctrl_max * 1e6
                 controller_metrics["missed_cycles"] = self._rt_missed_cycles
                 controller_metrics["ctrl_iterations"] = self._rt_ctrl_iterations
-                controller_metrics["overruns"] = self._rt_overruns
+                controller_metrics["loop_overruns"] = self._rt_overruns
                 # Reset all accumulators
                 self._rt_loop_sum = 0.0
                 self._rt_loop_count = 0
