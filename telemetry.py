@@ -58,6 +58,21 @@ class Telemetry:
         self.system_metrics_sample_period = 1.0 # seconds
         self.addr = (ip, port)
 
+        # --- Controller metrics accumulators ---
+        self._rt_loop_sum = 0.0
+        self._rt_loop_count = 0
+        self._rt_ctrl_sum = 0.0
+        self._rt_ctrl_count = 0
+        self._rt_overruns = 0
+        self._rt_jitter_sum = 0.0
+        self._rt_jitter_sq_sum = 0.0
+        self._rt_jitter_count = 0
+        self._rt_loop_max = 0.0
+        self._rt_ctrl_max = 0.0
+        self._rt_missed_cycles = 0
+        self._rt_ctrl_iterations = 0
+        # ---------------------------------------
+
         self.enabled = False
         self.sock = None
 
@@ -140,18 +155,57 @@ class Telemetry:
             time.sleep(self.period)
             now = time.time()
 
-            # Take current frame and CLEAR it for the next period
             with self._lock:
-                if not self._frame:
-                    # nothing to send this frame
-                    continue
-                frame = self._frame
+                # Always create a frame, even if empty
+                frame = self._frame if self._frame else {}
                 self._frame = {}
+            # # Take current frame and CLEAR it for the next period
+            # with self._lock:
+            #     if not self._frame:
+            #         # nothing to send this frame
+            #         continue
+            #     frame = self._frame
+            #     self._frame = {}
 
-            # Obtain system metrics once per some time
+            # Obtain system metrics once per some time and put into frame
             if now - last_system_metrics_sample > self.system_metrics_sample_period:
                 frame["system_metrics"] = get_system_metrics()
                 last_system_metrics_sample = now
+
+            # Extract and reset accumulated run_controller metrics
+            controller_metrics = {}
+            with self._lock:
+                if self._rt_loop_count > 0:
+                    controller_metrics["loop_time_avg_ms"] = (self._rt_loop_sum / self._rt_loop_count) * 1000
+                if self._rt_ctrl_count > 0:
+                    controller_metrics["ctrl_time_avg_us"] = (self._rt_ctrl_sum / self._rt_ctrl_count) * 1e6
+                if self._rt_jitter_count > 0:
+                    mean = self._rt_jitter_sum / self._rt_jitter_count
+                    mean_sq = self._rt_jitter_sq_sum / self._rt_jitter_count
+                    rms = (mean_sq - mean * mean) ** 0.5
+                    controller_metrics["jitter_rms_us"] = rms * 1e6
+                controller_metrics["max_loop_time_ms"] = self._rt_loop_max * 1000
+                controller_metrics["max_ctrl_time_us"] = self._rt_ctrl_max * 1e6
+                controller_metrics["missed_cycles"] = self._rt_missed_cycles
+                controller_metrics["ctrl_iterations"] = self._rt_ctrl_iterations
+                controller_metrics["overruns"] = self._rt_overruns
+                # Reset all accumulators
+                self._rt_loop_sum = 0.0
+                self._rt_loop_count = 0
+                self._rt_ctrl_sum = 0.0
+                self._rt_ctrl_count = 0
+                self._rt_overruns = 0
+                self._rt_jitter_sum = 0.0
+                self._rt_jitter_sq_sum = 0.0
+                self._rt_jitter_count = 0
+                self._rt_loop_max = 0.0
+                self._rt_ctrl_max = 0.0
+                self._rt_missed_cycles = 0
+                self._rt_ctrl_iterations = 0
+
+            # Only add if something was measured
+            if controller_metrics:
+                frame["controller_metrics"] = controller_metrics
 
             # Build, pack, and send packet
             packet = {
@@ -176,3 +230,45 @@ class Telemetry:
             self.sock.close()
         except Exception:
             pass
+
+    # ----------------------------------------------------------------------    
+    def accum_rt_loop_time(self, dt: float):
+        """Accumulate loop execution time (seconds)."""
+        with self._lock:
+            self._rt_loop_sum += dt
+            self._rt_loop_count += 1
+
+    def accum_rt_ctrl_time(self, dt: float):
+        """Accumulate controller execution time (seconds)."""
+        with self._lock:
+            self._rt_ctrl_sum += dt
+            self._rt_ctrl_count += 1
+
+    def flag_rt_overrun(self):
+        """Increase count of controller loop overruns."""
+        with self._lock:
+            self._rt_overruns += 1
+
+    def accum_rt_jitter(self, jitter: float):
+        with self._lock:
+            self._rt_jitter_sum += jitter
+            self._rt_jitter_sq_sum += jitter * jitter
+            self._rt_jitter_count += 1
+
+    def accum_rt_loop_max(self, dt: float):
+        with self._lock:
+            if dt > self._rt_loop_max:
+                self._rt_loop_max = dt
+
+    def accum_rt_ctrl_max(self, dt: float):
+        with self._lock:
+            if dt > self._rt_ctrl_max:
+                self._rt_ctrl_max = dt
+
+    def flag_rt_missed_cycle(self, n: int = 1):
+        with self._lock:
+            self._rt_missed_cycles += n
+
+    def inc_rt_ctrl_iterations(self):
+        with self._lock:
+            self._rt_ctrl_iterations += 1

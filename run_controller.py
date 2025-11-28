@@ -32,6 +32,7 @@ def main():
     last_controller_run = 0.0
 
     while running:
+        loop_start = time.monotonic() # TELEMETRY: measure loop time
         # -------------------------------------------------------
         # Drain CAN buffer completely
         # -------------------------------------------------------
@@ -77,11 +78,20 @@ def main():
         # Periodic controller execution (controller-defined DT)
         # -------------------------------------------------------
         now = time.monotonic()
-        if now - last_controller_run >= controller.DT:
-            last_controller_run = now
+        elapsed = now - last_controller_run
+        if elapsed >= controller.DT:
+            last_controller_run += controller.DT
+            telemetry.accum_rt_jitter(elapsed - controller.DT) # TELEMETRY: accumulate jitter
+
+            controller_start = time.monotonic()  # TELEMETRY: measure controller time
 
             # Step controller
             controller_state, outputs = controller.step_controller(controller_state, inputs)
+
+            controller_execution_time = time.monotonic() - controller_start # TELEMETRY: measure controller time
+            telemetry.accum_rt_ctrl_time(controller_execution_time) # TELEMETRY: accumulate controller time
+            telemetry.accum_rt_ctrl_max(controller_execution_time)
+            telemetry.inc_rt_ctrl_iterations()
 
             # -------------------------------------------------------
             # Send actuator data (if controller produced any)
@@ -101,6 +111,12 @@ def main():
             telemetry.push("inputs", inputs)
             telemetry.push("outputs", outputs) 
             telemetry.push(f"{controller.NAME}", controller_state)
+
+        loop_time = time.monotonic() - loop_start # TELEMETRY: measure loop time
+        telemetry.accum_rt_loop_time(loop_time) # TELEMETRY: accumulate loop time
+        telemetry.accum_rt_loop_max(loop_time)
+        if loop_time > controller.DT:
+            telemetry.flag_rt_overrun() # TELEMETRY: flag overrun
 
         # Small sleep to reduce CPU load
         time.sleep(0.0001)
