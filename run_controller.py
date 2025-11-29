@@ -9,7 +9,7 @@ from telemetry import Telemetry
 from controllers import manual_controller as manual_controller
 
 # AUTO controller (MODE = 2)
-from controllers import auto_controller as auto_controller
+from controllers import automatic_PID_for_each_wing_common_variable_setpoint as auto_controller
 
 running = True
 

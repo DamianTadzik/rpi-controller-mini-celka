@@ -23,7 +23,7 @@
 #  between control steps.
 #
 # ============================================================================
-
+from control_helpers import map, saturate
 
 # Controller update rate (seconds)
 # Example: 0.01 → 100 Hz controller
@@ -95,16 +95,6 @@ def step_controller(state, inputs):
         If no outputs are produced:
             return state, {}
     """
-
-    def map(x, in_min, in_max, out_min, out_max):
-        # Linear mapping from one range to another
-        return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min
-    
-    def saturate(x, x_min, x_max):
-        # Saturate x to [x_min, x_max]
-        return max(min(x, x_max), x_min)
-
-
     # Read inputs from controller
     radio_front_pitch = inputs.get("RADIO_FRONT_PITCH", 0)
     radio_front_roll = inputs.get("RADIO_FRONT_ROLL", 0)
