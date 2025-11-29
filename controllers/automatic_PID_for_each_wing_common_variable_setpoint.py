@@ -1,10 +1,7 @@
 # ============================================================================
-#  FIRST PID CONTROLLER
-#  --------------------
-#  This is a simple controller
-#
-#  Controllers define:
+#  Controller define:
 #       - DT:     update period (seconds)
+#       - NAME:   controller name displayed in telemetry
 #       - init_controller():   returns initial internal state dict
 #       - step_controller():   runs one control step
 #
@@ -18,17 +15,14 @@
 #               "PADDING":              value (optional)
 #           }
 #       }
-#
-#  AND the internal state must be returned so it can be preserved
-#  between control steps.
-#
 # ============================================================================
 
+from control_helpers import map, saturate
+from control_helpers import PID_initialize_state, PID_controller_step
 
-# Controller update rate (seconds)
-# Example: 0.01 → 100 Hz controller
-DT = 0.01
-
+DT = 0.01 # Controller update rate (seconds)
+NAME = "PID_each" # idk if name should be short if that's transmitted over UDP with msgpack
+# automatic_PID_for_each_wing_common_variable_setpoint
 
 def init_controller():
     """
@@ -47,9 +41,24 @@ def init_controller():
     """
 
     state = {
-        "last_error": 0.0,
-        "integrator": 0.0,
-        "timestamp": 0.0,
+        "setpoint_heave_mm": 100.0, # desired heave in mm
+
+        "rear_error": 0.0,
+        "front_left_error": 0.0, 
+        "front_right_error": 0.0,
+
+        # Rear wing PID controller state
+        "rear_controller" : PID_initialize_state(
+            Kp=0.15, Ki=0.01, Kd=0.05, integral_absolute_limit=50.0
+        ),
+
+        "front_left_controller" : PID_initialize_state(
+            Kp=0.1, Ki=0.0, Kd=0.0, integral_absolute_limit=0.0
+        ),
+
+        "front_right_controller" : PID_initialize_state(
+            Kp=0.1, Ki=0.0, Kd=0.0, integral_absolute_limit=0.0
+        ),
     }
 
     return state
@@ -66,12 +75,6 @@ def step_controller(state, inputs):
 
     inputs : dict
         Dictionary containing **all decoded CAN signals** from CANBusIO.
-        Example keys (depending on your SIGNAL_MAP):
-            inputs["ACCELEROMETER_AX"]
-            inputs["GYROSCOPE_AY"]
-            inputs["DISTANCE_FORE_LEFT"]
-            inputs["RADIO_THROTTLE"]
-            inputs["RADIO_STEERING"]
 
     Returns
     -------
@@ -80,54 +83,44 @@ def step_controller(state, inputs):
 
     outputs : dict
         CAN messages to be transmitted by CANBusIO.
-        The outer dictionary key must match the **DBC message name**.
-
-        Example:
-            outputs = {
-                "AUTO_CONTROL": {
-                    "FRONT_LEFT_SETPOINT":  300,
-                    "FRONT_RIGHT_SETPOINT": 300,
-                    "REAR_SETPOINT":        512,
-                    "PADDING":              0,
-                }
+        outputs = {
+            "AUTO_CONTROL": {
+                "FRONT_LEFT_SETPOINT":  300,
+                "FRONT_RIGHT_SETPOINT": 300,
+                "REAR_SETPOINT":        512,
+                "PADDING":              0,
             }
-
+        }
         If no outputs are produced:
             return state, {}
     """
-    def saturate(x, x_min, x_max):
-        # Saturate x to [x_min, x_max]
-        return max(min(x, x_max), x_min)
-
     # Read input values
-    radio_pitch = inputs["RADIO_FRONT_PITCH"]
+    radio_rear_pitch = inputs["RADIO_REAR_PITCH"]
 
     FL_distance = inputs["DISTANCE_FORE_LEFT"]
     FR_distance = inputs["DISTANCE_FORE_RIGHT"]
 
     AL_distance = inputs["DISTANCE_ACHTER_LEFT"]
     AR_distance = inputs["DISTANCE_ACHTER_RIGHT"]
-    ## ?????? how do i know if reading is correct XD
 
-   
+
     # Setpoint
-    heave_setpoint = 100 # mm  
+    state["setpoint_heave_mm"] = map(radio_rear_pitch, -1000, +1000, 25.0, 125.0) 
 
 
-    # Alghoritm 
+    # Alghoritm, separate PID for each control surface
     #   Rear wing control
     rear_distance = (AL_distance + AR_distance) / 2.0
-    rear_error = heave_setpoint - rear_distance
-
-    rear_control = 0.1 * rear_error
+    state["rear_error"] = state["setpoint_heave_mm"] - rear_distance
+    rear_control = PID_controller_step(state["rear_error"], state["rear_controller"], DT)
 
     #   Front left wing control
-    front_left_error = heave_setpoint - FL_distance
-    front_left_control = 0.1 * front_left_error + radio_pitch 
-
+    state["front_left_error"] = state["setpoint_heave_mm"] - FL_distance
+    front_left_control = PID_controller_step(state["front_left_error"], state["front_left_controller"], DT)
+    
     #   Front right wing control
-    front_right_error = heave_setpoint - FR_distance    
-    front_right_control = 0.1 * front_right_error + radio_pitch
+    state["front_right_error"] = state["setpoint_heave_mm"] - FR_distance    
+    front_right_control = PID_controller_step(state["front_right_error"], state["front_right_controller"], DT)
 
 
     # Output
