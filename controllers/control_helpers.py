@@ -1,10 +1,14 @@
-def map(x, in_min, in_max, out_min, out_max):
+def map(x: float, in_min: float, in_max: float, out_min: float, out_max: float) -> float:
     # Linear mapping from one range to another
     return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min
 
-def saturate(x, x_min, x_max):
+def saturate(x: float, x_min: float, x_max: float) -> float:
     # Saturate x to [x_min, x_max]
     return max(min(x, x_max), x_min)
+
+def lowpass_filter(prev_value: float, new_value: float, alpha: float) -> float:
+    # Simple low pass filter
+    return prev_value + alpha * (new_value - prev_value)
 
 
 

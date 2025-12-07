@@ -23,7 +23,7 @@
 #  between control steps.
 #
 # ============================================================================
-from control_helpers import map, saturate
+from controllers.control_helpers import map, saturate
 
 # Controller update rate (seconds)
 # Example: 0.01 → 100 Hz controller

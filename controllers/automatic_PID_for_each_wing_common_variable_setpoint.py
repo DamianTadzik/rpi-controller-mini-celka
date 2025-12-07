@@ -17,8 +17,8 @@
 #       }
 # ============================================================================
 
-from control_helpers import map, saturate
-from control_helpers import PID_initialize_state, PID_controller_step
+from controllers.control_helpers import map, saturate, lowpass_filter
+from controllers.control_helpers import PID_initialize_state, PID_controller_step
 
 DT = 0.01 # Controller update rate (seconds)
 NAME = "PID_each" # idk if name should be short if that's transmitted over UDP with msgpack
@@ -43,21 +43,25 @@ def init_controller():
     state = {
         "setpoint_heave_mm": 100.0, # desired heave in mm
 
+        "rear_distance": 0.0,
+        "front_left_distance": 0.0,
+        "front_right_distance": 0.0,
+
         "rear_error": 0.0,
         "front_left_error": 0.0, 
         "front_right_error": 0.0,
 
         # Rear wing PID controller state
         "rear_controller" : PID_initialize_state(
-            Kp=0.15, Ki=0.01, Kd=0.05, integral_absolute_limit=50.0
+            Kp=0.2, Ki=0.01, Kd=0.004, integral_absolute_limit=10.0
         ),
 
         "front_left_controller" : PID_initialize_state(
-            Kp=0.1, Ki=0.0, Kd=0.0, integral_absolute_limit=0.0
+            Kp=0.2, Ki=0.01, Kd=0.004, integral_absolute_limit=10.0
         ),
 
         "front_right_controller" : PID_initialize_state(
-            Kp=0.1, Ki=0.0, Kd=0.0, integral_absolute_limit=0.0
+            Kp=0.3, Ki=0.01, Kd=0.004, integral_absolute_limit=10.0
         ),
     }
 
@@ -105,21 +109,23 @@ def step_controller(state, inputs):
 
 
     # Setpoint
-    state["setpoint_heave_mm"] = map(radio_rear_pitch, -1000, +1000, 25.0, 125.0) 
+    state["setpoint_heave_mm"] = map(radio_rear_pitch, -1000, +1000, 50.0, 150.0) 
 
 
     # Alghoritm, separate PID for each control surface
     #   Rear wing control
-    rear_distance = (AL_distance + AR_distance) / 2.0
-    state["rear_error"] = state["setpoint_heave_mm"] - rear_distance
+    state["rear_distance"] = lowpass_filter(state["rear_distance"], (AL_distance + AR_distance)/2.0, 0.1)
+    state["rear_error"] = state["setpoint_heave_mm"] - state["rear_distance"]
     rear_control = PID_controller_step(state["rear_error"], state["rear_controller"], DT)
 
     #   Front left wing control
-    state["front_left_error"] = state["setpoint_heave_mm"] - FL_distance
+    state["front_left_distance"] = lowpass_filter(state["front_left_distance"], FL_distance, 0.1)
+    state["front_left_error"] = state["setpoint_heave_mm"] - state["front_left_distance"]
     front_left_control = PID_controller_step(state["front_left_error"], state["front_left_controller"], DT)
     
     #   Front right wing control
-    state["front_right_error"] = state["setpoint_heave_mm"] - FR_distance    
+    state["front_right_distance"] = lowpass_filter(state["front_right_distance"], FR_distance, 0.1)
+    state["front_right_error"] = state["setpoint_heave_mm"] - state["front_right_distance"]    
     front_right_control = PID_controller_step(state["front_right_error"], state["front_right_controller"], DT)
 
 

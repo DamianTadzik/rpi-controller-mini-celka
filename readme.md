@@ -64,27 +64,15 @@ source venv/bin/activate
 pip install python-can cantools
 ```
 
-Enable CAN interface:
-
-```bash
-sudo ip link set can0 up type can bitrate 125000
-```
-
-Verify:
-
-```bash
-ip -details link show can0
-```
 
 ## Running the Controller on Raspberry Pi
 
 ### 1. Enable CAN
 
 ```bash
-sudo ip link set can0 up type can bitrate 125000
-```
+sudo ip link set can0 up type can bitrate 500000
 
-(optional auto-start via `/boot/config.txt` depending on your HAT)
+```
 
 ### 2. Activate your Python environment
 
