@@ -46,6 +46,14 @@ class CANBusIO:
             ("DISTANCE_ACHTER_FEEDBACK", "RANGE_MM_R") : "DISTANCE_ACHTER_RIGHT",
         }
 
+        self.TIMESTAMP_MAP = {
+            "RADIO_CONTROL":            "RADIO_CONTROL",
+            "ACCELEROMETER":            "ACCELEROMETER",
+            "GYROSCOPE":                "GYROSCOPE",
+            "DISTANCE_FORE_FEEDBACK":   "DISTANCE_FORE_FEEDBACK",
+            "DISTANCE_ACHTER_FEEDBACK": "DISTANCE_ACHTER_FEEDBACK",
+        }
+
         if not debug:
             # Prepare decoder: frame_id -> dbc message object
             self.in_messages = {}
@@ -55,7 +63,10 @@ class CANBusIO:
 
             # Unified boat state initialization
             self.boat_state = {key: 0 for key in self.SIGNAL_MAP.values()}
-            self.boat_state["timestamp"] = time.monotonic()
+            # self.boat_state["timestamp"] = time.monotonic()
+
+            for base in self.TIMESTAMP_MAP.values():
+                self.boat_state[f"{base}_timestamp"] = None
 
             # CAN bus
             self.bus = can.interface.Bus(channel=can_channel, bustype="socketcan")
@@ -75,14 +86,15 @@ class CANBusIO:
             return
 
         msg_name = dbc_msg.name
-
+        # Update timestamp for this message
+        self.boat_state[f"{self.TIMESTAMP_MAP[msg_name]}_timestamp"] = time.monotonic()
         # Map decoded signals to boat_state
         for sig_name, val in decoded.items():
             key = self.SIGNAL_MAP.get((msg_name, sig_name))
             if key:
                 self.boat_state[key] = val
 
-        self.boat_state["timestamp"] = time.monotonic()
+        
 
     # ----------------------------------------------------------------------
 
