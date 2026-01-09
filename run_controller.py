@@ -72,10 +72,11 @@ def main():
             observer_start = time.monotonic() # TELEMETRY: measure observer time
 
             # Step observer
-            observer_state, estimated_state = observer.step_observer(observer_state, inputs)
+            observer_state, x_hat = observer.step_observer(observer_state, inputs)
             # Update inputs with estimated state  
-            inputs.update(estimated_state) # or inputs["ESTIMATED_STATE"] = estimated_state
-
+            #inputs.update(x_hat) # or inputs["ESTIMATED_STATE"] = estimated_state
+            telemetry.push("x_hat", x_hat)
+            
             observer_execution_time = time.monotonic() - observer_start # TELEMETRY: measure observer time
             telemetry.accum_rt_obs_time(observer_execution_time) # TELEMETRY: accumulate observer time
             telemetry.accum_rt_obs_max(observer_execution_time)
