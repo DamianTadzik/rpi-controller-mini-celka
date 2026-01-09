@@ -5,6 +5,9 @@ import signal
 from can_bus_io import CANBusIO
 from telemetry import Telemetry
 
+# OBSERVER: Madgwick + Kalman Filter 
+from observers import observer_Mahony_KF as observer
+
 # MANUAL controller (MODE = 1)
 from controllers import manual_controller as manual_controller
 
@@ -23,13 +26,18 @@ def main():
 
     can_io = CANBusIO()
     telemetry = Telemetry(ip="255.255.255.255", port=9870, rate_hz=50)
+    
+    # Init observer state
+    observer_state = observer.init_observer()
 
     # Default mode = MANUAL
     controller = manual_controller
     controller_state = controller.init_controller()
     last_mode = None
-    # Initialize controller timing
-    last_controller_run = 0.0
+
+    # Initialize timing
+    last_observer_run = time.monotonic()
+    last_controller_run = time.monotonic()
 
     while running:
         loop_start = time.monotonic() # TELEMETRY: measure loop time
@@ -48,6 +56,31 @@ def main():
         inputs = can_io.get_state()
         ARM = inputs["RADIO_ARM_SWITCH"]
         MODE = inputs["RADIO_MODE_SWITCH"]
+
+        # -------------------------------------------------------
+        # Periodic observer execution (observer-defined DT)
+        # ------------------------------------------------------
+        now = time.monotonic()
+        elapsed = now - last_observer_run
+        if elapsed >= observer.DT:
+            last_observer_run += observer.DT
+
+            telemetry.accum_rt_obs_jitter(elapsed - observer.DT) # TELEMETRY: accumulate jitter
+            cycles = int(elapsed // observer.DT)
+            if cycles > 1:
+                telemetry.flag_rt_obs_missed_cycle(cycles - 1)
+            observer_start = time.monotonic() # TELEMETRY: measure observer time
+
+            # Step observer
+            observer_state, estimated_state = observer.step_observer(observer_state, inputs)
+            # Update inputs with estimated state  
+            inputs.update(estimated_state) # or inputs["ESTIMATED_STATE"] = estimated_state
+
+            observer_execution_time = time.monotonic() - observer_start # TELEMETRY: measure observer time
+            telemetry.accum_rt_obs_time(observer_execution_time) # TELEMETRY: accumulate observer time
+            telemetry.accum_rt_obs_max(observer_execution_time)
+            telemetry.inc_rt_obs_iterations()
+
 
         # -------------------------------------------------------
         # Armed check
@@ -73,6 +106,7 @@ def main():
 
             # Init controller state
             controller_state = controller.init_controller()
+
 
         # -------------------------------------------------------
         # Periodic controller execution (controller-defined DT)

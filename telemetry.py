@@ -71,6 +71,15 @@ class Telemetry:
         self._rt_ctrl_max = 0.0
         self._rt_missed_cycles = 0
         self._rt_ctrl_iterations = 0
+        # --- Observer metrics accumulators ---
+        self._rt_obs_sum = 0.0
+        self._rt_obs_count = 0
+        self._rt_obs_max = 0.0
+        self._rt_obs_jitter_sum = 0.0
+        self._rt_obs_jitter_sq_sum = 0.0
+        self._rt_obs_jitter_count = 0
+        self._rt_obs_missed_cycles = 0
+        self._rt_obs_iterations = 0
         # ---------------------------------------
 
         self.enabled = False
@@ -203,9 +212,36 @@ class Telemetry:
                 self._rt_missed_cycles = 0
                 self._rt_ctrl_iterations = 0
 
+            # Extract and reset observer metrics
+            observer_metrics = {}
+            with self._lock:
+                if self._rt_obs_count > 0:
+                    observer_metrics["obs_time_avg_us"] = (self._rt_obs_sum / self._rt_obs_count) * 1e6
+                if self._rt_obs_jitter_count > 0:
+                    mean = self._rt_obs_jitter_sum / self._rt_obs_jitter_count
+                    mean_sq = self._rt_obs_jitter_sq_sum / self._rt_obs_jitter_count
+                    rms = (mean_sq - mean * mean) ** 0.5
+                    observer_metrics["jitter_rms_us"] = rms * 1e6
+
+                observer_metrics["max_obs_time_us"] = self._rt_obs_max * 1e6
+                observer_metrics["missed_cycles"] = self._rt_obs_missed_cycles
+                observer_metrics["obs_iterations"] = self._rt_obs_iterations
+                # reset
+                self._rt_obs_sum = 0.0
+                self._rt_obs_count = 0
+                self._rt_obs_max = 0.0
+                self._rt_obs_jitter_sum = 0.0
+                self._rt_obs_jitter_sq_sum = 0.0
+                self._rt_obs_jitter_count = 0
+                self._rt_obs_missed_cycles = 0
+                self._rt_obs_iterations = 0
+
+
             # Only add if something was measured
             if controller_metrics:
                 frame["controller_metrics"] = controller_metrics
+            if observer_metrics:
+                frame["observer_metrics"] = observer_metrics
 
             # Build, pack, and send packet
             packet = {
@@ -272,3 +308,29 @@ class Telemetry:
     def inc_rt_ctrl_iterations(self):
         with self._lock:
             self._rt_ctrl_iterations += 1
+
+    # ----------------------------------------------------------------------
+    def accum_rt_obs_time(self, dt: float):
+        """Accumulate observer execution time (seconds)."""
+        with self._lock:
+            self._rt_obs_sum += dt
+            self._rt_obs_count += 1
+
+    def accum_rt_obs_max(self, dt: float):
+        with self._lock:
+            if dt > self._rt_obs_max:
+                self._rt_obs_max = dt
+
+    def accum_rt_obs_jitter(self, jitter: float):
+        with self._lock:
+            self._rt_obs_jitter_sum += jitter
+            self._rt_obs_jitter_sq_sum += jitter * jitter
+            self._rt_obs_jitter_count += 1
+
+    def flag_rt_obs_missed_cycle(self, n: int = 1):
+        with self._lock:
+            self._rt_obs_missed_cycles += n
+
+    def inc_rt_obs_iterations(self):
+        with self._lock:
+            self._rt_obs_iterations += 1
