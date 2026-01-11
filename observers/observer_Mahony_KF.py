@@ -113,7 +113,7 @@ def mahony_update(q, b, gyro_rad_s, accel_g, params):
         e = np.array([0.0, 0.0, 0.0], dtype=float)
 
     # bias update (integral)
-    b = b + Ki * e * Ts
+    b = b - Ki * e * Ts
 
     # corrected gyro for quaternion integration (P + I)
     omega = gyro_rad_s - b + Kp * e
