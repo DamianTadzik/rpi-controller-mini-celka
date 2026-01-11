@@ -128,86 +128,37 @@ def mahony_update(q, b, gyro_rad_s, accel_g, params):
     return q, b, w
 
 
-# =========================
-# ToF FRONT (FL, FR) -> z
-# =========================
-def tof_front_to_z(tof_mm_front, phi, theta, params):
+def tof_to_z_i(i, tof_mm, phi, theta, params):
     """
-    tof_mm_front: [FL, FR] in mm
-    returns z_front [m], NED +down
+    i: 0..3 -> FL, FR, RL, RR
+    tof_mm: scalar
     """
-    d = np.array(tof_mm_front, dtype=float) * 1e-3  # mm -> m
+    d = float(tof_mm) * 1e-3  # mm -> m
 
-    cphi = cos(phi);  sphi = sin(phi)
+    cphi = cos(phi); sphi = sin(phi)
     cth  = cos(theta); sth = sin(theta)
 
-    R_x = np.array([
-        [1,    0,     0],
-        [0,  cphi, -sphi],
-        [0,  sphi,  cphi],
-    ], dtype=float)
-
-    R_y = np.array([
-        [ cth, 0,  sth],
-        [  0,  1,   0 ],
-        [-sth, 0,  cth],
-    ], dtype=float)
-
+    R_x = np.array([[1,0,0],[0,cphi,-sphi],[0,sphi,cphi]], dtype=float)
+    R_y = np.array([[cth,0,sth],[0,1,0],[-sth,0,cth]], dtype=float)
     R_BW = R_y @ R_x
 
-    e_W = R_BW @ np.array([0.0, 0.0, 1.0])
+    e_W = R_BW @ np.array([0.0, 0.0, 1.0], dtype=float)
     ez = float(e_W[2])
 
     tof_pos = params["tof"]
-    rB = np.column_stack([
-        np.array(tof_pos["pos_FL_B"], dtype=float),
-        np.array(tof_pos["pos_FR_B"], dtype=float),
-    ])
+    if i == 0:
+        rB = np.array(tof_pos["pos_FL_B"], dtype=float)
+    elif i == 1:
+        rB = np.array(tof_pos["pos_FR_B"], dtype=float)
+    elif i == 2:
+        rB = np.array(tof_pos["pos_RL_B"], dtype=float)
+    elif i == 3:
+        rB = np.array(tof_pos["pos_RR_B"], dtype=float)
+    else:
+        raise ValueError("Invalid ToF index")
+
     rW = R_BW @ rB
-
-    z_i = -d * ez - rW[2, :]
-    return float(np.mean(z_i))
-
-
-# =========================
-# ToF REAR (RL, RR) -> z
-# =========================
-def tof_rear_to_z(tof_mm_rear, phi, theta, params):
-    """
-    tof_mm_rear: [RL, RR] in mm
-    returns z_rear [m], NED +down
-    """
-    d = np.array(tof_mm_rear, dtype=float) * 1e-3  # mm -> m
-
-    cphi = cos(phi);  sphi = sin(phi)
-    cth  = cos(theta); sth = sin(theta)
-
-    R_x = np.array([
-        [1,    0,     0],
-        [0,  cphi, -sphi],
-        [0,  sphi,  cphi],
-    ], dtype=float)
-
-    R_y = np.array([
-        [ cth, 0,  sth],
-        [  0,  1,   0 ],
-        [-sth, 0,  cth],
-    ], dtype=float)
-
-    R_BW = R_y @ R_x
-
-    e_W = R_BW @ np.array([0.0, 0.0, 1.0])
-    ez = float(e_W[2])
-
-    tof_pos = params["tof"]
-    rB = np.column_stack([
-        np.array(tof_pos["pos_RL_B"], dtype=float),
-        np.array(tof_pos["pos_RR_B"], dtype=float),
-    ])
-    rW = R_BW @ rB
-
-    z_i = -d * ez - rW[2, :]
-    return float(np.mean(z_i))
+    return -d * ez - float(rW[2])  # NED +down
 
 
 def kf_predict(state, accel_g, quat, params):
@@ -235,20 +186,21 @@ def kf_predict(state, accel_g, quat, params):
     state["xh"] = A @ xh + B * a_z
     state["Pz"] = A @ Pz @ A.T + Q
 
-
-def kf_update_z(state, z_meas, params):
+def kf_update_z(state, z_meas, params, sensor_idx):
     xh = state["xh"]
     Pz = state["Pz"]
 
-    R = params["observer"]["heave_KF"]["R"]
+    R_i = params["observer"]["heave_KF"]["R_i"]
+    R = float(R_i[sensor_idx])
 
-    H = np.array([1.0, 0.0, 0.0])
+    H = np.array([1.0, 0.0, 0.0], dtype=float)
 
-    S = H @ Pz @ H.T + R
-    K = (Pz @ H.T) / S
+    S = float(H @ Pz @ H.T + R)
+    K = (Pz @ H.T) / S  # (3,)
 
-    state["xh"] = xh + K * (z_meas - H @ xh)
+    state["xh"] = xh + K * (float(z_meas) - float(H @ xh))
     state["Pz"] = (np.eye(3) - np.outer(K, H)) @ Pz
+
 
 
 # Update rate (seconds)
@@ -293,7 +245,14 @@ def init_observer():
         "observer": {
             # Heave Kalman Filter
             "heave_KF": {
-                "R": 4.864859165974720e-05,
+                # "R": 4.864859165974720e-05,
+                # per-sensor measurement variance
+                "R_i": [
+                    4.864859165974720e-05,  # FL
+                    4.864859165974720e-05,  # FR
+                    4.864859165974720e-05,  # RL
+                    4.864859165974720e-05,  # RR
+                ] * 4 * 1e2,
                 "Q": np.diag([
                     1e-6,  # z
                     1e-4,  # z_dot
@@ -392,15 +351,16 @@ def step_observer(state, inputs):
     gyro_rads = np.deg2rad(gyro_dps)
 
     FL = float(inputs.get("DISTANCE_FORE_LEFT", 0.0))
+    status_FL = inputs.get("DISTANCE_FORE_LEFT_STATUS", -1) # 0=OK anything else=error
     FR = float(inputs.get("DISTANCE_FORE_RIGHT", 0.0))
-    tof_F_mm = [FL, FR] # These two are coming in at the same time
-    RL = float(inputs.get("DISTANCE_REAR_LEFT", 0.0))
-    RR = float(inputs.get("DISTANCE_REAR_RIGHT", 0.0))
-    tof_R_mm = [RL, RR] # These two are coming in at the same time
+    status_FR = inputs.get("DISTANCE_FORE_RIGHT_STATUS", -1)
 
+    RL = float(inputs.get("DISTANCE_REAR_LEFT", 0.0))
+    status_RL = inputs.get("DISTANCE_REAR_LEFT_STATUS", -1)
+    RR = float(inputs.get("DISTANCE_REAR_RIGHT", 0.0))
+    status_RR = inputs.get("DISTANCE_REAR_RIGHT_STATUS", -1)
 
     params = state.get("params")
-
     params["Ts"] = DT
 
     # ==============================================================
@@ -408,29 +368,50 @@ def step_observer(state, inputs):
     # ==============================================================
 
     # Mahony
-
     state["quat"], state["gyro_bias"], gyro_corr = mahony_update(state["quat"], state["gyro_bias"], gyro_rads, accel_g, params)
 
     phi, theta, psi = quat_to_euler_BW(state["quat"])   # [rad]
     p, q, r = gyro_corr                     # [rad/s]
 
-
     # Kalman
-
     kf_predict(state, accel_g, state["quat"], params)
 
     # KF update (only when ToF arrives)
     tF = inputs.get("DISTANCE_FORE_FEEDBACK_timestamp", None)
-    if tF is not None and tF != state["t_tof_front_prev"]:
-        zF = tof_front_to_z(tof_F_mm, phi, theta, params)
-        kf_update_z(state, zF, params)
+    new_front = (tF is not None) and (tF != state["t_tof_front_prev"])
+    if new_front:
         state["t_tof_front_prev"] = tF
 
-    tR = inputs.get("DISTANCE_ACHTER_FEEDBACK_timestamp")
-    if tR is not None and tR != state["t_tof_rear_prev"]:
-        zR = tof_rear_to_z(tof_R_mm, phi, theta, params)
-        kf_update_z(state, zR, params)
+    tR = inputs.get("DISTANCE_ACHTER_FEEDBACK_timestamp", None)
+    new_rear = (tR is not None) and (tR != state["t_tof_rear_prev"])
+    if new_rear:
         state["t_tof_rear_prev"] = tR
+
+    # Build full vectors in MATLAB order: [FL, FR, RL, RR]
+    tof_mm = np.array([FL, FR, RL, RR], dtype=float)
+
+    # Convert CAN status: 0=OK -> 1=good (simulation convention)
+    tof_status = np.array([
+        1 if status_FL == 0 else 0,
+        1 if status_FR == 0 else 0,
+        1 if status_RL == 0 else 0,
+        1 if status_RR == 0 else 0,
+    ], dtype=int)
+
+    # Only update when a NEW packet arrived for that pair
+    can_update = np.array([
+        1 if new_front else 0,  # FL
+        1 if new_front else 0,  # FR
+        1 if new_rear  else 0,  # RL
+        1 if new_rear  else 0,  # RR
+    ], dtype=int)
+
+    use = (can_update == 1) & (tof_status == 1)
+
+    for i in range(4):
+        if use[i]:
+            z_meas = tof_to_z_i(i, tof_mm[i], phi, theta, params)  # i = 0..3
+            kf_update_z(state, z_meas, params, i)
 
     # ==============================================================
     # Outputs packing
@@ -439,14 +420,16 @@ def step_observer(state, inputs):
     z_dot = state["xh"][1]
 
     x_hat = {
-        "z":      float(z),
-        "z_dot":  float(z_dot),
-        "phi":    float(phi),
-        "theta":  float(theta),
-        "psi":    float(psi),
-        "p":      float(p),
-        "q":      float(q),
-        "r":      float(r),
+        "z_m":        float(z),        # heave position [m] (NED +down)
+        "z_dot_mps":  float(z_dot),    # heave velocity [m/s]
+
+        "phi_rad":    float(phi),      # roll  [rad]
+        "theta_rad":  float(theta),    # pitch [rad]
+        "psi_rad":    float(psi),      # yaw   [rad]
+
+        "p_radps":    float(p),        # roll rate  [rad/s]
+        "q_radps":    float(q),        # pitch rate [rad/s]
+        "r_radps":    float(r),        # yaw rate   [rad/s]
     }
 
     return state, x_hat
