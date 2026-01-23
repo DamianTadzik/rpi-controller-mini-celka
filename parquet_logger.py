@@ -3,6 +3,7 @@ import queue
 import os
 import time
 import pyarrow
+import pyarrow.parquet
 
 
 class ParquetLogger:
@@ -50,7 +51,7 @@ class ParquetLogger:
                 pass
 
             if lines and (time.monotonic() - last_flush_time >= self.flush_interval_s or len(lines) >= self.flush_lines):
-                self._flush()
+                self._flush(lines)
                 lines = []
                 last_flush_time = time.monotonic()
     

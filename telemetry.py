@@ -54,7 +54,7 @@ class Telemetry:
       from telemetry automatically on the next frame.
     """
 
-    def __init__(self, rate_hz=30, ip="255.255.255.255", port=9870, logging=False):
+    def __init__(self, rate_hz=30, ip="255.255.255.255", port=9870, logging=True):
         self.rate_hz = rate_hz
         self.period = 1.0 / rate_hz
         self.system_metrics_sample_period = 1.0 # seconds
@@ -88,7 +88,7 @@ class Telemetry:
         self.sock = None
 
         if logging:
-            self.logger = ParquetLogger()
+            self.logger = ParquetLogger(path="/home/brzanpi/ws_minicelka/rpi-controller-mini-celka/logs/")
         else:
             self.logger = None
 
