@@ -10,32 +10,32 @@ ALLOWED_SIGNALS = {
     # observer
     "x_hat.z_m",
     "x_hat.z_dot_mps",
-    "x_hat.phi_rad",
-    "x_hat.theta_rad",
-    "x_hat.psi_rad",
-    "x_hat.p_radps",
-    "x_hat.q_radps",
-    "x_hat.r_radps",
+    #"x_hat.phi_rad",
+    #"x_hat.theta_rad",
+    #"x_hat.psi_rad",
+    #"x_hat.p_radps",
+    #"x_hat.q_radps",
+    #"x_hat.r_radps",
 
     # controller metrics
-    "controller_metrics.max_loop_time_ms",
-    "controller_metrics.max_ctrl_time_us",
-    "controller_metrics.missed_cycles",
-    "controller_metrics.ctrl_iterations",
-    "controller_metrics.loop_overruns",
+    #"controller_metrics.max_loop_time_ms",
+    #"controller_metrics.max_ctrl_time_us",
+    #"controller_metrics.missed_cycles",
+    #"controller_metrics.ctrl_iterations",
+    #"controller_metrics.loop_overruns",
 
     # observer metrics
-    "observer_metrics.obs_time_avg_us",
-    "observer_metrics.jitter_rms_us",
-    "observer_metrics.max_obs_time_us",
-    "observer_metrics.missed_cycles",
-    "observer_metrics.obs_iterations",
+    #"observer_metrics.obs_time_avg_us",
+    #"observer_metrics.jitter_rms_us",
+    #"observer_metrics.max_obs_time_us",
+    #"observer_metrics.missed_cycles",
+    #"observer_metrics.obs_iterations",
 
     # system
-    "system_metrics.cpu_percent",
-    "system_metrics.mem_percent",
-    "system_metrics.cpu_temp_c",
-    "system_metrics.wifi_signal_dbm",
+    #"system_metrics.cpu_percent",
+    #"system_metrics.mem_percent",
+    #"system_metrics.cpu_temp_c",
+    #"system_metrics.wifi_signal_dbm",
 }
 
 
@@ -63,6 +63,11 @@ class ParquetLogger:
 
         self.log_file_path = os.path.join(self.path, f"log{max_index + 1}.parquet")
         self.q = queue.SimpleQueue()
+
+        self._schema = pyarrow.schema(
+            [("timestamp", pyarrow.float64())] +
+            [(name, pyarrow.float64()) for name in sorted(ALLOWED_SIGNALS)]
+        )
 
         # Start the logging thread
         self.running = True
@@ -115,19 +120,18 @@ class ParquetLogger:
 
         if not rows:
             return
+        
+        table = pyarrow.Table.from_pylist(rows, schema=self._schema)
 
-        table = pyarrow.Table.from_pylist(rows)
-
-        # --- append logic ---
         if self._writer is None:
             self._writer = pyarrow.parquet.ParquetWriter(
                 self.log_file_path,
-                table.schema,
+                self._schema,
                 compression="snappy"
             )
 
         self._writer.write_table(table)
-
+    
     def stop(self):
         self.running = False
         self.thread.join()
