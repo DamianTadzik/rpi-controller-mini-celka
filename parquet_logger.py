@@ -59,13 +59,40 @@ class ParquetLogger:
         if not packets:
             return
 
-        table = pyarrow.Table.from_pylist(packets)
+        rows = []
 
-        pyarrow.parquet.write_table(
-            table,
-            self.log_file_path,
-            compression="snappy"
-        )
+        for pkt in packets:
+            row = {}
+
+            # keep top-level timestamp for PlotJuggler
+            if "timestamp" in pkt:
+                row["timestamp"] = pkt["timestamp"]
+
+            # flatten ONE level only
+            for group, data in pkt.get("brzanpi", {}).items():
+                if not isinstance(data, dict):
+                    continue
+
+                for k, v in data.items():
+                    if isinstance(v, (int, float)):
+                        row[f"{group}.{k}"] = v
+
+            rows.append(row)
+
+        if not rows:
+            return
+
+        table = pa.Table.from_pylist(rows)
+
+        # --- append logic ---
+        if self._writer is None:
+            self._writer = pq.ParquetWriter(
+                self.log_file_path,
+                table.schema,
+                compression="snappy"
+            )
+
+        self._writer.write_table(table)
 
     def stop(self):
         self.running = False
