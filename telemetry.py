@@ -5,6 +5,8 @@ import threading
 import os
 import psutil
 
+from parquet_logger import ParquetLogger
+
 
 def get_system_metrics():
     # CPU %
@@ -52,7 +54,7 @@ class Telemetry:
       from telemetry automatically on the next frame.
     """
 
-    def __init__(self, rate_hz=30, ip="255.255.255.255", port=9870):
+    def __init__(self, rate_hz=30, ip="255.255.255.255", port=9870, logging=False):
         self.rate_hz = rate_hz
         self.period = 1.0 / rate_hz
         self.system_metrics_sample_period = 1.0 # seconds
@@ -84,6 +86,11 @@ class Telemetry:
 
         self.enabled = False
         self.sock = None
+
+        if logging:
+            self.logger = ParquetLogger()
+        else:
+            self.logger = None
 
         # Data for the *next* frame only
         self._frame = {}             # dict to be sent next
@@ -258,6 +265,10 @@ class Telemetry:
                     self.sock.close()
                 except Exception:
                     pass
+            
+            # Log packet if logger enabled
+            if self.logger:
+                self.logger.push(packet)
 
     # ----------------------------------------------------------------------
     def stop(self):
