@@ -6,11 +6,45 @@ import pyarrow
 import pyarrow.parquet
 
 
+ALLOWED_SIGNALS = {
+    # observer
+    "x_hat.z_m",
+    "x_hat.z_dot_mps",
+    "x_hat.phi_rad",
+    "x_hat.theta_rad",
+    "x_hat.psi_rad",
+    "x_hat.p_radps",
+    "x_hat.q_radps",
+    "x_hat.r_radps",
+
+    # controller metrics
+    "controller_metrics.max_loop_time_ms",
+    "controller_metrics.max_ctrl_time_us",
+    "controller_metrics.missed_cycles",
+    "controller_metrics.ctrl_iterations",
+    "controller_metrics.loop_overruns",
+
+    # observer metrics
+    "observer_metrics.obs_time_avg_us",
+    "observer_metrics.jitter_rms_us",
+    "observer_metrics.max_obs_time_us",
+    "observer_metrics.missed_cycles",
+    "observer_metrics.obs_iterations",
+
+    # system
+    "system_metrics.cpu_percent",
+    "system_metrics.mem_percent",
+    "system_metrics.cpu_temp_c",
+    "system_metrics.wifi_signal_dbm",
+}
+
+
 class ParquetLogger:
     def __init__(self, path="logs/", flush_interval_s=60, flush_lines=1000):
         self.path = path
         self.flush_interval_s = flush_interval_s
         self.flush_lines = flush_lines
+        self._writer = None
 
         # Check the logs directory exists at the initialization and create it if not
         if not os.path.exists(self.path):
@@ -64,29 +98,29 @@ class ParquetLogger:
         for pkt in packets:
             row = {}
 
-            # keep top-level timestamp for PlotJuggler
+            # timestamp for PlotJuggler
             if "timestamp" in pkt:
                 row["timestamp"] = pkt["timestamp"]
 
-            # flatten ONE level only
             for group, data in pkt.get("brzanpi", {}).items():
                 if not isinstance(data, dict):
                     continue
 
                 for k, v in data.items():
-                    if isinstance(v, (int, float)):
-                        row[f"{group}.{k}"] = v
+                    name = f"{group}.{k}"
+                    if name in ALLOWED_SIGNALS and isinstance(v, (int, float)):
+                        row[name] = v
 
             rows.append(row)
 
         if not rows:
             return
 
-        table = pa.Table.from_pylist(rows)
+        table = pyarrow.Table.from_pylist(rows)
 
         # --- append logic ---
         if self._writer is None:
-            self._writer = pq.ParquetWriter(
+            self._writer = pyarrow.parquet.ParquetWriter(
                 self.log_file_path,
                 table.schema,
                 compression="snappy"
@@ -97,5 +131,7 @@ class ParquetLogger:
     def stop(self):
         self.running = False
         self.thread.join()
-        self._flush()
-        
+
+        if self._writer is not None:
+            self._writer.close()
+            self._writer = None
