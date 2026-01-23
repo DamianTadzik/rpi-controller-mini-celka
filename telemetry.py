@@ -5,7 +5,7 @@ import threading
 import os
 import psutil
 
-from parquet_logger import ParquetLogger
+from logger import Logger
 
 
 def get_system_metrics():
@@ -88,7 +88,7 @@ class Telemetry:
         self.sock = None
 
         if logging:
-            self.logger = ParquetLogger(path="/home/brzanpi/ws_minicelka/rpi-controller-mini-celka/logs/")
+            self.logger = Logger(path="/home/brzanpi/ws_minicelka/rpi-controller-mini-celka/logs/")
         else:
             self.logger = None
 
@@ -256,8 +256,13 @@ class Telemetry:
                 "brzanpi": frame,
             }
             try:
+                # Pack
                 bin_packet = msgpack.packb(packet, use_bin_type=True)
+                # Send via UDP
                 self.sock.sendto(bin_packet, self.addr)
+                # Log packet if logger enabled
+                if self.logger:
+                    self.logger.push(bin_packet)
             except Exception:
                 # network down → disable and retry later
                 self.enabled = False
@@ -266,9 +271,7 @@ class Telemetry:
                 except Exception:
                     pass
             
-            # Log packet if logger enabled
-            if self.logger:
-                self.logger.push(packet)
+
 
     # ----------------------------------------------------------------------
     def stop(self):
@@ -277,6 +280,8 @@ class Telemetry:
             self.sock.close()
         except Exception:
             pass
+        if self.logger:
+            self.logger.stop()
 
     # ----------------------------------------------------------------------    
     def accum_rt_loop_time(self, dt: float):
