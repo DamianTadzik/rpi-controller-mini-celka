@@ -3,8 +3,11 @@ import msgpack
 import threading
 
 class Logger:
-    def __init__(self, path="logs/"):
+    def __init__(self, path="logs/", max_bytes=100*1024*1024, max_seconds=60*60*4):
         os.makedirs(path, exist_ok=True)
+
+        self.max_bytes = max_bytes
+        self.max_seconds = max_seconds
 
         # find next log index
         existing = [
