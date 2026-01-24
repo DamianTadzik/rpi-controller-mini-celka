@@ -1,3 +1,4 @@
+import struct
 import time
 import can
 import cantools
@@ -87,6 +88,14 @@ class CANBusIO:
                 msg = self.db.get_message_by_name(name)
                 self.in_messages[msg.frame_id] = msg
 
+            # Precompute FLOAT32 signals per frame_id
+            self.float32_signals = {}
+            for frame_id, msg in self.in_messages.items():
+                self.float32_signals[frame_id] = {
+                    s.name for s in msg.signals
+                    if "FLOAT32_IEEE" in (s.unit or "")
+                }
+
             # Unified boat state initialization
             self.boat_state = {key: 0 for key in self.SIGNAL_MAP.values()}
             # self.boat_state["timestamp"] = time.monotonic()
@@ -110,6 +119,12 @@ class CANBusIO:
             decoded = dbc_msg.decode(msg.data)
         except Exception:
             return
+        
+        # FLOAT32_IEEE conversion
+        for name in self.float32_signals.get(msg.arbitration_id, ()):
+            raw = decoded.get(name)
+            if isinstance(raw, int):
+                decoded[name] = struct.unpack('<f', raw.to_bytes(4, 'little'))[0]
 
         msg_name = dbc_msg.name
         # Update timestamp for this message
