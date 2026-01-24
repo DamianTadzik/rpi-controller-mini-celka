@@ -18,7 +18,13 @@ class CANBusIO:
             "ACCELEROMETER",
             "GYROSCOPE",
             "DISTANCE_FORE_FEEDBACK",
-            "DISTANCE_ACHTER_FEEDBACK",           
+            "DISTANCE_ACHTER_FEEDBACK",
+
+
+            "ODRIVE_GET_BUS_VOLTAGE_CURRENT",
+            "ODRIVE_GET_IQ",
+            "ODRIVE_SET_INPUT_VEL",
+            "ODRIVE_GET_SENSORLESS_ESTIMATES",
         ]
 
         # Mapping: (message_name, signal_name) -> boat_state_key
@@ -48,6 +54,17 @@ class CANBusIO:
             ("DISTANCE_ACHTER_FEEDBACK", "ERROR_STATUS_L") : "DISTANCE_ACHTER_LEFT_STATUS",
             ("DISTANCE_ACHTER_FEEDBACK", "RANGE_MM_R") : "DISTANCE_ACHTER_RIGHT",
             ("DISTANCE_ACHTER_FEEDBACK", "ERROR_STATUS_R") : "DISTANCE_ACHTER_RIGHT_STATUS",
+
+
+            ("ODRIVE_GET_BUS_VOLTAGE_CURRENT", "Bus_Voltage") : "ODRIVE_BUS_VOLTAGE",
+            ("ODRIVE_GET_BUS_VOLTAGE_CURRENT", "Bus_Current") : "ODRIVE_BUS_CURRENT",
+
+            ("ODRIVE_GET_IQ", "Iq_Setpoint") : "ODRIVE_IQ_SETPOINT",
+            ("ODRIVE_GET_IQ", "Iq_Measured") : "ODRIVE_IQ_MEASURED",
+
+            ("ODRIVE_SET_INPUT_VEL", "Input_Vel") : "ODRIVE_INPUT_VELOCITY",
+
+            ("ODRIVE_GET_SENSORLESS_ESTIMATES", "Sensorless_Vel_Estimate") : "ODRIVE_VELOCITY_ESTIMATE",
         }
 
         self.TIMESTAMP_MAP = {
@@ -56,6 +73,11 @@ class CANBusIO:
             "GYROSCOPE":                "GYROSCOPE",
             "DISTANCE_FORE_FEEDBACK":   "DISTANCE_FORE_FEEDBACK",
             "DISTANCE_ACHTER_FEEDBACK": "DISTANCE_ACHTER_FEEDBACK",
+
+            "ODRIVE_GET_BUS_VOLTAGE_CURRENT":  "ODRIVE_GET_BUS_VOLTAGE_CURRENT",
+            "ODRIVE_GET_IQ":                   "ODRIVE_GET_IQ",
+            "ODRIVE_SET_INPUT_VEL":            "ODRIVE_SET_INPUT_VEL",
+            "ODRIVE_GET_SENSORLESS_ESTIMATES": "ODRIVE_GET_SENSORLESS_ESTIMATES",
         }
 
         if not debug:
@@ -97,9 +119,7 @@ class CANBusIO:
             key = self.SIGNAL_MAP.get((msg_name, sig_name))
             if key:
                 self.boat_state[key] = val
-
         
-
     # ----------------------------------------------------------------------
 
     def get_state(self):

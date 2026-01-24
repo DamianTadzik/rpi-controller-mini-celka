@@ -54,6 +54,7 @@ def main():
         # Read state
         # -------------------------------------------------------
         inputs = can_io.get_state()
+        telemetry.push("inputs", inputs)
         ARM = inputs["RADIO_ARM_SWITCH"]
         MODE = inputs["RADIO_MODE_SWITCH"]
 
@@ -81,7 +82,6 @@ def main():
             telemetry.accum_rt_obs_time(observer_execution_time) # TELEMETRY: accumulate observer time
             telemetry.accum_rt_obs_max(observer_execution_time)
             telemetry.inc_rt_obs_iterations()
-
 
         # -------------------------------------------------------
         # Armed check
@@ -146,7 +146,6 @@ def main():
             # -------------------------------------------------------
             # Telemetry
             # -------------------------------------------------------
-            telemetry.push("inputs", inputs)
             telemetry.push("outputs", outputs) 
             telemetry.push(f"{controller.NAME}", controller_state)
 
