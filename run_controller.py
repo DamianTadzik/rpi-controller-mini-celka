@@ -25,7 +25,7 @@ def main():
     signal.signal(signal.SIGINT, stop)
 
     can_io = CANBusIO()
-    telemetry = Telemetry(ip="255.255.255.255", port=9870, rate_hz=50)
+    telemetry = Telemetry(ip="255.255.255.255", port=9870, rate_hz=100)
     
     # Init observer state
     observer_state = observer.init_observer()
