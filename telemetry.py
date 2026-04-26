@@ -5,6 +5,7 @@ import threading
 import os
 import psutil
 
+from typing import cast 
 from logger import Logger
 
 
@@ -164,8 +165,8 @@ class Telemetry:
                 if now - last_retry > 2.0:
                     last_retry = now
                     self._try_enable_socket()
-                time.sleep(0.05)
-                continue
+           #     time.sleep(0.05)
+            #    continue
 
             # Rate control
             time.sleep(self.period)
@@ -255,22 +256,29 @@ class Telemetry:
                 "timestamp": now,
                 "brzanpi": frame,
             }
+            
             try:
-                # Pack
-                bin_packet = msgpack.packb(packet, use_bin_type=True)
-                # Send via UDP
-                self.sock.sendto(bin_packet, self.addr)
-                # Log packet if logger enabled
-                if self.logger:
-                    self.logger.push(bin_packet)
+                bin_packet = cast(bytes, msgpack.packb(packet, use_bin_type=True))
             except Exception:
-                # network down → disable and retry later
-                self.enabled = False
+                continue
+
+            if self.logger:
                 try:
-                    self.sock.close()
+                    self.logger.push(bin_packet)
                 except Exception:
                     pass
-            
+
+            if self.enabled and self.sock is not None:
+                try:
+                    self.sock.sendto(bin_packet, self.addr)
+                except Exception:
+                    # network down → disable and retry later
+                    self.enabled = False
+                    try:
+                        self.sock.close()
+                    except Exception:
+                        pass
+                    self.sock = None            
 
 
     # ----------------------------------------------------------------------

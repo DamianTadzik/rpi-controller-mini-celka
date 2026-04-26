@@ -57,7 +57,7 @@ class CANBusIO:
 
             ("GPS_MOTION", "GroundSpeed") : "GPS_GROUND_SPEED",
             ("GPS_MOTION", "Heading") : "GPS_HEADING",
-            ("GPS_MOTION", "SpeedAccuracyEstimate") : "GPS_SPEED_ACCURACY",
+            ("GPS_MOTION", "SpeedAccuracyEstimate") : "GPS_GROUND_SPEED_ACCURACY",
             ("GPS_MOTION", "HeadingAccuracyEstimate") : "GPS_HEADING_ACCURACY",
 
             ("GPS_POSITION", "Latitude") : "GPS_LATITUDE",
