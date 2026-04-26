@@ -18,6 +18,11 @@ class CANBusIO:
             "RADIO_CONTROL",
             "ACCELEROMETER",
             "GYROSCOPE",
+
+            "GPS_MOTION",
+            "GPS_POSITION",
+            "GPS_TIME_STATUS",
+
             "DISTANCE_FORE_FEEDBACK",
             "DISTANCE_ACHTER_FEEDBACK",
 
@@ -49,6 +54,24 @@ class CANBusIO:
             ("GYROSCOPE", "GX"): "GYROSCOPE_X",
             ("GYROSCOPE", "GY"): "GYROSCOPE_Y",
             ("GYROSCOPE", "GZ"): "GYROSCOPE_Z",
+
+            ("GPS_MOTION", "GroundSpeed") : "GPS_GROUND_SPEED",
+            ("GPS_MOTION", "Heading") : "GPS_HEADING",
+            ("GPS_MOTION", "SpeedAccuracyEstimate") : "GPS_SPEED_ACCURACY",
+            ("GPS_MOTION", "HeadingAccuracyEstimate") : "GPS_HEADING_ACCURACY",
+
+            ("GPS_POSITION", "Latitude") : "GPS_LATITUDE",
+            ("GPS_POSITION", "Longitude") : "GPS_LONGITUDE",
+
+            ("GPS_TIME_STATUS", "Year") : "GPS_YEAR",
+            ("GPS_TIME_STATUS", "Month") : "GPS_MONTH",
+            ("GPS_TIME_STATUS", "Day") : "GPS_DAY",
+            ("GPS_TIME_STATUS", "Hour") : "GPS_HOUR",
+            ("GPS_TIME_STATUS", "Min") : "GPS_MIN",
+            ("GPS_TIME_STATUS", "Sec") : "GPS_SEC",
+            ("GPS_TIME_STATUS", "Valid") : "GPS_VALID",
+            ("GPS_TIME_STATUS", "FixType") : "GPS_FIX_TYPE",
+            ("GPS_TIME_STATUS", "NumSV") : "GPS_NUM_SV",
 
             ("DISTANCE_FORE_FEEDBACK", "RANGE_MM_L") : "DISTANCE_FORE_LEFT",
             ("DISTANCE_FORE_FEEDBACK", "ERROR_STATUS_L") : "DISTANCE_FORE_LEFT_STATUS",
@@ -90,6 +113,11 @@ class CANBusIO:
             "RADIO_CONTROL":            "RADIO_CONTROL",
             "ACCELEROMETER":            "ACCELEROMETER",
             "GYROSCOPE":                "GYROSCOPE",
+            
+            "GPS_MOTION":               "GPS_MOTION",
+            "GPS_POSITION":             "GPS_POSITION",
+            "GPS_TIME_STATUS":          "GPS_TIME_STATUS",
+
             "DISTANCE_FORE_FEEDBACK":   "DISTANCE_FORE_FEEDBACK",
             "DISTANCE_ACHTER_FEEDBACK": "DISTANCE_ACHTER_FEEDBACK",
 
