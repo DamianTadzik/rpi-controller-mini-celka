@@ -167,7 +167,7 @@ class CANBusIO:
         dbc_msg = self.in_messages[msg.arbitration_id]
 
         try:
-            decoded = dbc_msg.decode(msg.data)
+            decoded = dbc_msg.decode(msg.data, decode_choices=False)
         except Exception:
             return
         
