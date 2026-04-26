@@ -44,6 +44,8 @@ class CANBusIO:
             ("RADIO_CONTROL", "FRONT_PITCH")    : "RADIO_FRONT_PITCH",
             ("RADIO_CONTROL", "FRONT_ROLL")     : "RADIO_FRONT_ROLL",
             ("RADIO_CONTROL", "REAR_PITCH")     : "RADIO_REAR_PITCH",
+
+            ("RADIO_CONTROL", "SYNC_SWITCH")    : "RADIO_SYNC_SWITCH",
             ("RADIO_CONTROL", "ARM_SWITCH")     : "RADIO_ARM_SWITCH",
             ("RADIO_CONTROL", "MODE_SWITCH")    : "RADIO_MODE_SWITCH",
 
