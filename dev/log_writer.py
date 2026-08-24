@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-import json
 import os
 import socket
 import time
@@ -118,56 +117,22 @@ class LogWriter:
         except FileNotFoundError:
             pass
 
-        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        sock.bind(self.control_socket_path)
-        sock.listen(1)
-        sock.setblocking(False)
-
-        self._control_socket = sock
-
-        print(
-            f"[log_writer] Control socket: "
-            f"{self.control_socket_path}"
-        )
+        self._control_socket = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+        self._control_socket.bind(self.control_socket_path)
+        self._control_socket.setblocking(False)
+        print(f"[log_writer] Rotation socket: {self.control_socket_path}")
 
     def _handle_control_socket(self):
-        if self._control_socket is None:
-            return
         try:
-            conn, _ = self._control_socket.accept()
+            command = self._control_socket.recv(64)
         except BlockingIOError:
             return
-        try:
-            conn.settimeout(0.5)
-            command = conn.recv(1024).decode("utf-8").strip().lower()
-            if command == "rotate":
-                self._rotate()
-                response = {
-                    "ok": True,
-                    "command": "rotate",
-                    "file": str(self._file_path),
-                }
-            elif command == "status":
-                response = self.get_status()
-            else:
-                response = {
-                    "ok": False,
-                    "error": f"unknown command: {command}",
-                }
-            conn.sendall(
-                (json.dumps(response) + "\n").encode("utf-8")
-            )
 
-        except Exception as exc:
-            print(f"[log_writer] Control socket error: {exc}")
-
-        finally:
-            conn.close()
-
+        if command.strip().lower() == b"rotate":
+            self._rotate()
 
     def get_status(self):
         return {
-            "ok": True,
             "file": str(self._file_path) if self._file_path else None,
             "records_written": self._records_written,
             "bytes_written": self._bytes_written,
