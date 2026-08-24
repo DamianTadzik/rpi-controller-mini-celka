@@ -1,0 +1,70 @@
+"""
+Definition of the runtime log file format.
+
+The log file consists of consecutive MsgPack objects:
+
+    header
+    record
+    record
+    record
+    ...
+
+Each data record is encoded as:
+
+    [schema_id, field_0, field_1, ...]
+
+The meaning and order of fields is described by the schemas
+stored in the file header.
+"""
+
+LOG_FORMAT_VERSION = 1
+# Schema IDs
+SCHEMA_CAN_LOG = 1
+SCHEMA_CONTROL_CYCLE_LOG = 2
+
+SCHEMAS = {
+    SCHEMA_CAN_LOG: {
+        "type": "can",
+        "fields": [
+            "timestamp",
+            "rx_wall_time_ns",
+            "rx_monotonic_ns",
+            "can_id",
+            "dlc",
+            "data",
+            "message",
+            "signals",
+        ],
+    },
+    SCHEMA_CONTROL_CYCLE_LOG: {
+        "type": "control_cycle",
+        "fields": [
+            "timestamp",
+            "timestamp_monotonic_ns",
+            "lateness_ns",
+            "execution_ns",
+            "observer_execution_ns",
+            "controller_execution_ns",
+            "estimated_state",
+            "outputs",
+        ],
+    }
+}
+
+def build_header():
+    """
+    Build a self-describing log file header.
+
+    The header contains everything required to interpret subsequent
+    array-encoded records.
+    """
+    return {
+        "type": "header",
+        "version": LOG_FORMAT_VERSION,
+        "schema_record_encoding": {
+            "container": "array",
+            "schema_id_index": 0,
+            "fields_start_index": 1,
+            "schemas": SCHEMAS,
+        }
+    }

@@ -11,6 +11,8 @@ import msgpack
 
 import config
 
+from log_format import build_header
+
 class LogWriter:
     def __init__(self):
         self.log_dir = Path(config.LOG_DIR)
@@ -69,6 +71,12 @@ class LogWriter:
         self._records_written = 0
         self._bytes_written = 0
         self._pack_errors = 0
+
+        # Write the log_format header.
+        packet = msgpack.packb(build_header(), use_bin_type=True)
+        self._file.write(packet)
+        self._bytes_written += len(packet)
+
         print(f"[log_writer] Opened {self._file_path}")
 
     def _flush(self):

@@ -8,6 +8,8 @@ from queue import Full
 from can_tx import CANTransmitter
 import config
 
+from log_format import SCHEMA_CONTROL_CYCLE_LOG
+
 
 class ControlLoop:
     def __init__(self, log_queue, latest_readout):
@@ -149,6 +151,8 @@ class ControlLoop:
             arm = int(readout.get("RADIO_ARM_SWITCH", 0))
             mode = int(readout.get("RADIO_MODE_SWITCH", 0))
 
+            arm = mode = 1
+
             observer_start_ns = time.monotonic_ns()
             estimated_state = self.observer.step(readout)
             observer_end_ns = time.monotonic_ns()
@@ -198,20 +202,33 @@ class ControlLoop:
                     controller_execution_ns,
                 )
 
-            self._log({
-                "type": "control_cycle",
-                "timestamp": cycle_start_wall_time,
-                "timestamp_monotonic_ns": cycle_start_ns,
-                "lateness_ns": lateness_ns,
-                "execution_ns": execution_ns,
-                "observer_execution_ns": observer_execution_ns,
-                "controller_execution_ns": controller_execution_ns,
-                "controller": controller_name,
-                "arm": arm,
-                "mode": mode,
-                "estimated_state": estimated_state,
-                "outputs": outputs,
-            })
+            # record = {
+            #     "type": "control_cycle",
+            #     "timestamp": cycle_start_wall_time,
+            #     "timestamp_monotonic_ns": cycle_start_ns,
+            #     "lateness_ns": lateness_ns,
+            #     "execution_ns": execution_ns,
+            #     "observer_execution_ns": observer_execution_ns,
+            #     "controller_execution_ns": controller_execution_ns,
+            #     # "controller": controller_name,
+            #     # "arm": arm,
+            #     # "mode": mode,
+            #     "estimated_state": estimated_state,
+            #     "outputs": outputs,
+            # }
+            record = [
+                SCHEMA_CONTROL_CYCLE_LOG,
+                cycle_start_wall_time,
+                cycle_start_ns,
+                lateness_ns,
+                execution_ns,
+                observer_execution_ns,
+                controller_execution_ns,
+                estimated_state,
+                outputs,
+            ]
+
+            self._log(record)
 
             next_tick_ns += self.period_ns
             now_ns = time.monotonic_ns()

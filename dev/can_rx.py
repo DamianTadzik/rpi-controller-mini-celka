@@ -9,6 +9,8 @@ import cantools
 
 import config
 
+from log_format import SCHEMA_CAN_LOG
+
 
 class CANRx:
     def __init__(self, log_queue, latest_readout):
@@ -91,25 +93,36 @@ class CANRx:
         rx_wall_time_ns,
         rx_monotonic_ns,
     ):
-        record = {
-            "type": "can",
-            # SocketCAN/python-can receive timestamp.
-            "timestamp": msg.timestamp,
-            # Timestamp when our process actually handled the frame.
-            "rx_wall_time_ns": rx_wall_time_ns,
-            "rx_monotonic_ns": rx_monotonic_ns,
-            "can_id": msg.arbitration_id,
-            "is_extended_id": msg.is_extended_id,
-            "is_remote_frame": msg.is_remote_frame,
-            "is_error_frame": msg.is_error_frame,
-            "dlc": msg.dlc,
-            # Always preserve original CAN data.
-            "data": bytes(msg.data),
-            # None for messages not present in the DBC.
-            "message": dbc_msg.name if dbc_msg is not None else None,
-            # None when unknown or when decoding failed.
-            "signals": decoded,
-        }
+        # record = {
+        #     "type": "can",
+        #     # SocketCAN/python-can receive timestamp.
+        #     "timestamp": msg.timestamp,
+        #     # Timestamp when our process actually handled the frame.
+        #     "rx_wall_time_ns": rx_wall_time_ns,
+        #     "rx_monotonic_ns": rx_monotonic_ns,
+        #     "can_id": msg.arbitration_id,
+        #     # "is_extended_id": msg.is_extended_id,
+        #     # "is_remote_frame": msg.is_remote_frame,
+        #     # "is_error_frame": msg.is_error_frame,
+        #     "dlc": msg.dlc,
+        #     # Always preserve original CAN data.
+        #     "data": bytes(msg.data),
+        #     # None for messages not present in the DBC.
+        #     "message": dbc_msg.name if dbc_msg is not None else None,
+        #     # None when unknown or when decoding failed.
+        #     "signals": decoded,
+        # }
+        record = [
+            SCHEMA_CAN_LOG,
+            msg.timestamp,
+            rx_wall_time_ns,
+            rx_monotonic_ns,
+            msg.arbitration_id,
+            msg.dlc,
+            bytes(msg.data),
+            dbc_msg.name if dbc_msg is not None else None,
+            decoded,
+        ]
 
         try:
             self.log_queue.put_nowait(record)
