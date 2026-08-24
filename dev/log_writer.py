@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import json
 import os
 import socket
 import time
@@ -16,16 +17,22 @@ class LogWriter:
         self.log_dir.mkdir(parents=True, exist_ok=True)
 
         self.control_socket_path = config.LOGGER_CONTROL_SOCKET
+        self._control_socket = None
 
         self._file = None
         self._file_path = None
         self._last_flush_monotonic = 0.0
 
+        # Per-file counters.
         self._records_written = 0
         self._bytes_written = 0
         self._pack_errors = 0
+        # Statistics since the previous periodic report.
+        self._stats_records_written = 0
+        self._stats_bytes_written = 0
+        self._stats_pack_errors = 0
+        self._last_status_print = time.monotonic()
 
-        self._control_socket = None
 
     # -------------------------------------------------------------------------
     # File handling
@@ -88,19 +95,20 @@ class LogWriter:
     # -------------------------------------------------------------------------
     def write_record(self, record):
         try:
-            packet = msgpack.packb(
-                record,
-                use_bin_type=True,
-            )
+            packet = msgpack.packb(record, use_bin_type=True)
         except Exception as exc:
             self._pack_errors += 1
+            self._stats_pack_errors += 1
             print(f"[log_writer] WARN: MsgPack encode failed: {exc}")
             return
 
         self._file.write(packet)
+        packet_size = len(packet)
 
         self._records_written += 1
-        self._bytes_written += len(packet)
+        self._bytes_written += packet_size
+        self._stats_records_written += 1
+        self._stats_bytes_written += packet_size
 
 
     def _periodic_flush(self):
@@ -131,13 +139,43 @@ class LogWriter:
         if command.strip().lower() == b"rotate":
             self._rotate()
 
-    def get_status(self):
+    def get_status(self) -> dict:
+        elapsed_s = time.monotonic() - self._last_status_print
+
+        records_per_s = (
+            self._stats_records_written / elapsed_s
+            if elapsed_s > 0 else 0.0
+        )
+        write_mib_per_s = (
+            self._stats_bytes_written / elapsed_s / (1024 * 1024)
+            if elapsed_s > 0 else 0.0
+        )
         return {
+            "module": "log_writer",
             "file": str(self._file_path) if self._file_path else None,
             "records_written": self._records_written,
             "bytes_written": self._bytes_written,
+            "file_size_mib": self._bytes_written / (1024 * 1024),
             "pack_errors": self._pack_errors,
+            "recent": {
+                "period_s": elapsed_s,
+                "records_written": self._stats_records_written,
+                "records_per_s": records_per_s,
+                "bytes_written": self._stats_bytes_written,
+                "write_mib_per_s": write_mib_per_s,
+                "pack_errors": self._stats_pack_errors,
+            },
         }
+
+    def _print_status_if_due(self):
+        now = time.monotonic()
+        if now - self._last_status_print < config.STATS_PRINT_PERIOD_S:
+            return
+        print(json.dumps(self.get_status(), indent=2))
+        self._stats_records_written = 0
+        self._stats_bytes_written = 0
+        self._stats_pack_errors = 0
+        self._last_status_print = now
 
     def start(self):
         self._open_new_file()
@@ -166,6 +204,7 @@ def run_log_writer(log_queue):
             except Empty:
                 pass
             writer._periodic_flush()
+            writer._print_status_if_due()
     except KeyboardInterrupt:
         pass
     except Exception as exc:

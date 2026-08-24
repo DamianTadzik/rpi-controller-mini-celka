@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-
+import json
 import struct
 import time
 from queue import Full
@@ -18,10 +18,7 @@ class CANRx:
         self.db = cantools.database.load_file(config.DBC_PATH)
 
         # frame_id -> cantools message
-        self.dbc_messages = {
-            msg.frame_id: msg
-            for msg in self.db.messages
-        }
+        self.dbc_messages = {msg.frame_id: msg for msg in self.db.messages}
 
         # Preserve the FLOAT32 handling from the old CANBusIO.
         self.float32_signals = {
@@ -38,14 +35,17 @@ class CANRx:
             interface=config.CAN_INTERFACE,
         )
 
+        # Lifetime statistics.
         self.received_frames = 0
         self.decode_errors = 0
         self.log_queue_drops = 0
+        # Statistics since the previous periodic report.
+        self._stats_received_frames = 0
+        self._stats_decode_errors = 0
+        self._stats_log_queue_drops = 0
+        self._last_status_print = time.monotonic()
 
-        print(
-            f"[can_rx] Listening on {config.CAN_CHANNEL}, "
-            f"DBC: {config.DBC_PATH}"
-        )
+        print(f"[can_rx] Listening on {config.CAN_CHANNEL}, DBC: {config.DBC_PATH}")
 
     # -------------------------------------------------------------------------
     # Decode
@@ -64,6 +64,7 @@ class CANRx:
             )
         except Exception:
             self.decode_errors += 1
+            self._stats_decode_errors += 1
             return dbc_msg, None
 
         # Same custom FLOAT32 conversion as in the previous implementation.
@@ -115,6 +116,7 @@ class CANRx:
 
         except Full:
             self.log_queue_drops += 1
+            self._stats_log_queue_drops += 1
 
             # Do not spam stdout if something goes badly wrong.
             if self.log_queue_drops == 1 or self.log_queue_drops % 100 == 0:
@@ -122,6 +124,37 @@ class CANRx:
                     f"[can_rx] WARNING: logger queue full, "
                     f"dropped {self.log_queue_drops} records"
                 )
+
+
+    def get_status(self) -> dict:
+        elapsed_s = time.monotonic() - self._last_status_print
+        rx_rate_hz = (
+            self._stats_received_frames / elapsed_s
+            if elapsed_s > 0 else 0.0
+        )
+        return {
+            "module": "can_rx",
+            "received_frames": self.received_frames,
+            "decode_errors": self.decode_errors,
+            "log_queue_drops": self.log_queue_drops,
+            "recent": {
+                "period_s": elapsed_s,
+                "received_frames": self._stats_received_frames,
+                "rx_rate_hz": rx_rate_hz,
+                "decode_errors": self._stats_decode_errors,
+                "log_queue_drops": self._stats_log_queue_drops,
+            },
+        }
+
+    def _print_status_if_due(self):
+        now = time.monotonic()
+        if now - self._last_status_print < config.STATS_PRINT_PERIOD_S:
+            return
+        print(json.dumps(self.get_status(), indent=2))
+        self._stats_received_frames = 0
+        self._stats_decode_errors = 0
+        self._stats_log_queue_drops = 0
+        self._last_status_print = now
 
     # -------------------------------------------------------------------------
     # Main RX loop
@@ -140,6 +173,7 @@ class CANRx:
             rx_monotonic_ns = time.monotonic_ns()
 
             self.received_frames += 1
+            self._stats_received_frames += 1
 
             # Decode exactly once.
             dbc_msg, decoded = self._decode(msg)
@@ -161,16 +195,13 @@ class CANRx:
                 rx_monotonic_ns,
             )
 
+            self._print_status_if_due()
+
 
 # =============================================================================
 # Process entry point
 # =============================================================================
 
 def run_can_rx(log_queue, latest_readout):
-    can_rx = CANRx(
-        log_queue=log_queue,
-        latest_readout=latest_readout,
-    )
-
-    can_rx.run()
+    CANRx(log_queue, latest_readout).run()
     
