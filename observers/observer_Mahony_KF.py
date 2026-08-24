@@ -202,12 +202,6 @@ def kf_update_z(state, z_meas, params, sensor_idx):
     state["Pz"] = (np.eye(3) - np.outer(K, H)) @ Pz
 
 
-
-# Update rate (seconds)
-# Example: 0.01 → 100 Hz 
-DT = 0.01
-
-
 def init_observer():
     """
     Initialize internal  state here.
@@ -223,10 +217,8 @@ def init_observer():
         - user-defined variables
     """
 
-    # Load the parameters from a MATLAB file or define them here
+    # Load the parameters from a MATLAB file or define them here, assuming Ts = 0.01 for example
     params = {
-        # fixed observer rate
-        "Ts": DT,
         "g": 9.80665,
 
         # -------------------------
@@ -355,13 +347,12 @@ def step_observer(state, inputs):
     FR = float(inputs.get("DISTANCE_FORE_RIGHT", 0.0))
     status_FR = inputs.get("DISTANCE_FORE_RIGHT_STATUS", -1)
 
-    RL = float(inputs.get("DISTANCE_REAR_LEFT", 0.0))
-    status_RL = inputs.get("DISTANCE_REAR_LEFT_STATUS", -1)
-    RR = float(inputs.get("DISTANCE_REAR_RIGHT", 0.0))
-    status_RR = inputs.get("DISTANCE_REAR_RIGHT_STATUS", -1)
+    RL = float(inputs.get("DISTANCE_ACHTER_LEFT", 0.0))
+    status_RL = inputs.get("DISTANCE_ACHTER_LEFT_STATUS", -1)
+    RR = float(inputs.get("DISTANCE_ACHTER_RIGHT", 0.0))
+    status_RR = inputs.get("DISTANCE_ACHTER_RIGHT_STATUS", -1)
 
     params = state.get("params")
-    params["Ts"] = DT
 
     # ==============================================================
     # Observer algorithm
