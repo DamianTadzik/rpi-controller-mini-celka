@@ -143,15 +143,13 @@ class ControlLoop:
                 continue
 
             scheduled_ns = next_tick_ns
-            cycle_start_wall_time = time.time()
+            cycle_start_wall_time_s = time.time()
             cycle_start_ns = time.monotonic_ns()
             lateness_ns = max(0, cycle_start_ns - scheduled_ns)
 
             readout = self.latest_readout.snapshot()
             arm = int(readout.get("RADIO_ARM_SWITCH", 0))
             mode = int(readout.get("RADIO_MODE_SWITCH", 0))
-
-            arm = mode = 1
 
             observer_start_ns = time.monotonic_ns()
             estimated_state = self.observer.step(readout)
@@ -204,7 +202,7 @@ class ControlLoop:
 
             # record = {
             #     "type": "control_cycle",
-            #     "timestamp": cycle_start_wall_time,
+            #     "timestamp_s": cycle_start_wall_time_s,
             #     "timestamp_monotonic_ns": cycle_start_ns,
             #     "lateness_ns": lateness_ns,
             #     "execution_ns": execution_ns,
@@ -218,7 +216,7 @@ class ControlLoop:
             # }
             record = [
                 SCHEMA_CONTROL_CYCLE_LOG,
-                cycle_start_wall_time,
+                cycle_start_wall_time_s,
                 cycle_start_ns,
                 lateness_ns,
                 execution_ns,

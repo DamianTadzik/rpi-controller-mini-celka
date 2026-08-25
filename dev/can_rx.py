@@ -90,16 +90,16 @@ class CANRx:
         msg,
         dbc_msg,
         decoded,
-        rx_wall_time_ns,
+        rx_wall_time_s,
         rx_monotonic_ns,
     ):
         # record = {
         #     "type": "can",
         #     # SocketCAN/python-can receive timestamp.
-        #     "timestamp": msg.timestamp,
+        #     "msg_timestamp": msg.timestamp,
         #     # Timestamp when our process actually handled the frame.
-        #     "rx_wall_time_ns": rx_wall_time_ns,
-        #     "rx_monotonic_ns": rx_monotonic_ns,
+        #     "timestamp_s": rx_wall_time_s,
+        #     "timestamp_monotonic_ns": rx_monotonic_ns,
         #     "can_id": msg.arbitration_id,
         #     # "is_extended_id": msg.is_extended_id,
         #     # "is_remote_frame": msg.is_remote_frame,
@@ -115,7 +115,7 @@ class CANRx:
         record = [
             SCHEMA_CAN_LOG,
             msg.timestamp,
-            rx_wall_time_ns,
+            rx_wall_time_s,
             rx_monotonic_ns,
             msg.arbitration_id,
             msg.dlc,
@@ -182,7 +182,7 @@ class CANRx:
                 continue
 
             # Capture these immediately after recv().
-            rx_wall_time_ns = time.time_ns()
+            rx_wall_time_s = time.time()
             rx_monotonic_ns = time.monotonic_ns()
 
             self.received_frames += 1
@@ -204,7 +204,7 @@ class CANRx:
                 msg,
                 dbc_msg,
                 decoded,
-                rx_wall_time_ns,
+                rx_wall_time_s,
                 rx_monotonic_ns,
             )
 

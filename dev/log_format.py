@@ -11,7 +11,7 @@ The log file consists of consecutive MsgPack objects:
 
 Each data record is encoded as:
 
-    [schema_id, field_0, field_1, ...]
+    [schema_id, primary_timestamp, field_0, field_1, ...]
 
 The meaning and order of fields is described by the schemas
 stored in the file header.
@@ -26,9 +26,9 @@ SCHEMAS = {
     SCHEMA_CAN_LOG: {
         "type": "can",
         "fields": [
-            "timestamp",
-            "rx_wall_time_ns",
-            "rx_monotonic_ns",
+            "msg_timestamp_s",
+            "timestamp_s",
+            "timestamp_monotonic_ns",
             "can_id",
             "dlc",
             "data",
@@ -39,7 +39,7 @@ SCHEMAS = {
     SCHEMA_CONTROL_CYCLE_LOG: {
         "type": "control_cycle",
         "fields": [
-            "timestamp",
+            "timestamp_s",
             "timestamp_monotonic_ns",
             "lateness_ns",
             "execution_ns",
@@ -61,10 +61,5 @@ def build_header():
     return {
         "type": "header",
         "version": LOG_FORMAT_VERSION,
-        "schema_record_encoding": {
-            "container": "array",
-            "schema_id_index": 0,
-            "fields_start_index": 1,
-            "schemas": SCHEMAS,
-        }
+        "schemas": SCHEMAS,
     }
