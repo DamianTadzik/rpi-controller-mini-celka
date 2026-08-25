@@ -37,6 +37,8 @@ sudo systemctl status <name>.service
 journalctl -u <name>.service -f
 journalctl -u my_can_interface.service -f
 ~~journalctl -u my_mini_celka_controller.service -f~~ DEPRECATED
+systemctl status minicelka_runtime.service
+journalctl -u minicelka_runtime.service -f
 
 5. Edit code without rebooting
 Just modify your script; systemd will use the updated file next time you start the service.
