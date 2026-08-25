@@ -1,14 +1,9 @@
-# ============================================================================
-# MANUAL CONTROLLER
-# ============================================================================
 """
 Example controller implementation for the Mini Celka control runtime.
-
 Every controller module should expose a class named ``Controller`` with the
 following interface:
 
     controller = Controller()
-
     outputs = controller.step(
         readout,
         estimated_state,
@@ -23,50 +18,31 @@ Inputs
 readout : dict
     Latest decoded CAN readout. These values come directly from the
     LatestReadout shared-memory object.
-
     Example:
         readout["RADIO_FRONT_PITCH"]
         readout["RADIO_FRONT_ROLL"]
         readout["RADIO_REAR_PITCH"]
-
 estimated_state : dict
     Current output of the observer.
-
     Example:
         estimated_state["z_m"]
         estimated_state["z_dot_mps"]
         estimated_state["phi_rad"]
         estimated_state["theta_rad"]
-
     A controller does not have to use the estimated state. The manual
     controller intentionally ignores it.
 
 Outputs
 -------
 dict
-    Dictionary of CAN messages to transmit.
-
-    The outer key is the DBC message name and the inner dictionary contains
-    the corresponding DBC signals.
-
-    Example:
-
-        {
-            "AUTO_CONTROL": {
-                "FRONT_LEFT_SETPOINT":  3.0,
-                "FRONT_RIGHT_SETPOINT": 3.0,
-                "REAR_SETPOINT":        3.0,
-                "PADDING":              0,
-            }
-        }
+    Tuple of setpoints to transmit, in degrees.
+    (left_setpoint, right_setpoint, rear_setpoint)
 
 Persistent state
 ----------------
 Any controller state that must survive between calls to ``step()`` should be
 stored as instance attributes.
-
 Example:
-
     self.integral_error = 0.0
     self.previous_error = 0.0
     self.filtered_value = 0.0
@@ -115,8 +91,8 @@ class Controller:
 
         Returns
         -------
-        dict
-            CAN messages to transmit.
+        tuple
+            (front_left_setpoint, front_right_setpoint, rear_setpoint)
         """
 
         # Read controller inputs
@@ -140,11 +116,5 @@ class Controller:
         rear_setpoint = map(rear_command, self.command_min, self.command_max, self.foil_angle_min_deg, self.foil_angle_max_deg)
 
         # CAN outputs
-        return {
-            "AUTO_CONTROL": {
-                "FRONT_LEFT_SETPOINT": left_setpoint,
-                "FRONT_RIGHT_SETPOINT": right_setpoint,
-                "REAR_SETPOINT": rear_setpoint,
-                "PADDING": 0,
-            }
-        }
+        return (left_setpoint, right_setpoint, rear_setpoint)
+        

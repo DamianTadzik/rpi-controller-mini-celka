@@ -28,44 +28,46 @@ class CANTransmitter:
         self._stats_send_execution_ns_sum = 0
         self._stats_max_send_execution_ns = 0
 
-    def send_outputs(self, outputs: dict):
-        if not outputs:
+    def send_outputs(self, outputs):
+        if outputs is None:
             return
+        front_left, front_right, rear = outputs
+        try:
+            dbc_msg = self.db.get_message_by_name("AUTO_CONTROL")
+            data = dbc_msg.encode({
+                "FRONT_LEFT_SETPOINT": front_left,
+                "FRONT_RIGHT_SETPOINT": front_right,
+                "REAR_SETPOINT": rear,
+                "PADDING": 0,
+            })
+            frame = can.Message(
+                arbitration_id=dbc_msg.frame_id,
+                data=data,
+                is_extended_id=dbc_msg.is_extended_frame,
+            )
 
-        for message_name, signals in outputs.items():
-            try:
-                dbc_msg = self.db.get_message_by_name(message_name)
-                data = dbc_msg.encode(signals)
+            start_ns = time.monotonic_ns()
+            self.bus.send(frame, timeout=config.CAN_TX_TIMEOUT_S)
+            end_ns = time.monotonic_ns()
 
-                frame = can.Message(
-                    arbitration_id=dbc_msg.frame_id,
-                    data=data,
-                    is_extended_id=dbc_msg.is_extended_frame,
-                )
+            self.sent_frames += 1
 
-                start_ns = time.monotonic_ns()
-                self.bus.send(frame, timeout=config.CAN_TX_TIMEOUT_S)
-                end_ns = time.monotonic_ns()
+            self.last_send_execution_ns = end_ns - start_ns
+            self.max_send_execution_ns = max(
+                self.max_send_execution_ns,
+                self.last_send_execution_ns,
+            )
+            self._stats_sent_frames += 1
+            self._stats_send_execution_ns_sum += self.last_send_execution_ns
+            self._stats_max_send_execution_ns = max(
+                self._stats_max_send_execution_ns,
+                self.last_send_execution_ns,
+            )
+        except Exception as exc:
+            self.send_errors += 1
+            self._stats_send_errors += 1
+            print(f"[can_tx] Failed to send AUTO_CONTROL: {exc}")
 
-                self.sent_frames += 1
-
-                self.last_send_execution_ns = end_ns - start_ns
-                self.max_send_execution_ns = max(
-                    self.max_send_execution_ns,
-                    self.last_send_execution_ns,
-                )
-
-                self._stats_sent_frames += 1
-                self._stats_send_execution_ns_sum += self.last_send_execution_ns
-                self._stats_max_send_execution_ns = max(
-                    self._stats_max_send_execution_ns,
-                    self.last_send_execution_ns,
-                )
-
-            except Exception as exc:
-                self.send_errors += 1
-                self._stats_send_errors += 1
-                print(f"[can_tx] Failed to send {message_name}: {exc}")
 
     def get_status(self) -> dict:
         avg_send_execution_ns = 0.0

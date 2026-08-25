@@ -345,17 +345,13 @@ class Observer:
         z = self.xh[0]
         z_dot = self.xh[1]
 
-        x_hat = {
-            "z_m":       float(z),      # heave position [m] (NED +down)
-            "z_dot_mps": float(z_dot),  # heave velocity [m/s]
-
-            "phi_rad":   float(phi),    # roll  [rad]
-            "theta_rad": float(theta),  # pitch [rad]
-            "psi_rad":   float(psi),    # yaw   [rad]
-
-            "p_radps":   float(p),      # roll rate  [rad/s]
-            "q_radps":   float(q),      # pitch rate [rad/s]
-            "r_radps":   float(r),      # yaw rate   [rad/s]
-        }
-
-        return x_hat
+        return (
+            float(z),       # heave position [m] (NED +down)
+            float(z_dot),   # heave velocity [m/s]
+            float(phi),     # roll  [rad]
+            float(theta),   # pitch [rad]
+            float(psi),     # yaw   [rad]
+            float(p),       # roll rate  [rad/s]
+            float(q),       # pitch rate [rad/s]
+            float(r),       # yaw rate   [rad/s]
+        )

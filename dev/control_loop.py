@@ -66,7 +66,7 @@ class ControlLoop:
                 readout,
                 estimated_state,
             )
-        return "none", {}
+        return "none", None
 
 
     def get_status(self) -> dict:
@@ -157,7 +157,7 @@ class ControlLoop:
             observer_execution_ns = observer_end_ns - observer_start_ns
 
             controller_name = "none"
-            outputs = {}
+            outputs = None
             controller_execution_ns = 0
             if arm in (1, 2):
                 controller_start_ns = time.monotonic_ns()
@@ -200,20 +200,23 @@ class ControlLoop:
                     controller_execution_ns,
                 )
 
-            # record = {
-            #     "type": "control_cycle",
-            #     "timestamp_s": cycle_start_wall_time_s,
-            #     "timestamp_monotonic_ns": cycle_start_ns,
-            #     "lateness_ns": lateness_ns,
-            #     "execution_ns": execution_ns,
-            #     "observer_execution_ns": observer_execution_ns,
-            #     "controller_execution_ns": controller_execution_ns,
-            #     # "controller": controller_name,
-            #     # "arm": arm,
-            #     # "mode": mode,
-            #     "estimated_state": estimated_state,
-            #     "outputs": outputs,
-            # }
+            # Unpack tuple
+            if outputs is None:
+                ( front_left_setpoint, front_right_setpoint, rear_setpoint ) = (None, None, None)
+            else:
+                ( front_left_setpoint, front_right_setpoint, rear_setpoint ) = outputs
+
+            (
+                z_m,
+                z_dot_mps,
+                phi_rad,
+                theta_rad,
+                psi_rad,
+                p_radps,
+                q_radps,
+                r_radps,
+            ) = estimated_state
+            
             record = [
                 SCHEMA_CONTROL_CYCLE_LOG,
                 cycle_start_wall_time_s,
@@ -222,8 +225,19 @@ class ControlLoop:
                 execution_ns,
                 observer_execution_ns,
                 controller_execution_ns,
-                estimated_state,
-                outputs,
+                # Estimated state
+                z_m,
+                z_dot_mps,
+                phi_rad,
+                theta_rad,
+                psi_rad,
+                p_radps,
+                q_radps,
+                r_radps,
+                # Three outputs
+                front_left_setpoint,
+                front_right_setpoint,
+                rear_setpoint,
             ]
 
             self._log(record)

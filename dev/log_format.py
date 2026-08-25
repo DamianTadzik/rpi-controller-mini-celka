@@ -45,8 +45,19 @@ SCHEMAS = {
             "execution_ns",
             "observer_execution_ns",
             "controller_execution_ns",
-            "estimated_state",
-            "outputs",
+
+            "estimated_state/z_m",
+            "estimated_state/z_dot_mps",
+            "estimated_state/phi_rad",
+            "estimated_state/theta_rad",
+            "estimated_state/psi_rad",
+            "estimated_state/p_radps",
+            "estimated_state/q_radps",
+            "estimated_state/r_radps",
+            
+            "outputs/front_left_setpoint",
+            "outputs/front_right_setpoint",
+            "outputs/rear_setpoint",
         ],
     }
 }
