@@ -2,10 +2,11 @@
 
 1. Create a service file
 
-Place it in /etc/systemd/system/:
+Place it in 
+~/../../etc/systemd/system/
 
-sudo nano /etc/systemd/system/<name>.service
-
+For example with:
+sudo vim ~/../../etc/systemd/system/<name>.service
 
 Minimal template:
 
@@ -35,7 +36,7 @@ sudo systemctl status <name>.service
 4. View logs
 journalctl -u <name>.service -f
 journalctl -u my_can_interface.service -f
-journalctl -u my_mini_celka_controller.service -f
+~~journalctl -u my_mini_celka_controller.service -f~~ DEPRECATED
 
 5. Edit code without rebooting
 Just modify your script; systemd will use the updated file next time you start the service.
