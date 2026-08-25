@@ -22,19 +22,14 @@ readout : dict
         readout["RADIO_FRONT_PITCH"]
         readout["RADIO_FRONT_ROLL"]
         readout["RADIO_REAR_PITCH"]
-estimated_state : dict
+estimated_state : tuple
     Current output of the observer.
-    Example:
-        estimated_state["z_m"]
-        estimated_state["z_dot_mps"]
-        estimated_state["phi_rad"]
-        estimated_state["theta_rad"]
     A controller does not have to use the estimated state. The manual
     controller intentionally ignores it.
 
 Outputs
 -------
-dict
+tuple
     Tuple of setpoints to transmit, in degrees.
     (left_setpoint, right_setpoint, rear_setpoint)
 
@@ -77,7 +72,7 @@ class Controller:
         # self.previous_error = 0.0
         # self.previous_output = 0.0
 
-    def step(self, readout: dict, estimated_state: dict) -> dict:
+    def step(self, readout: dict, estimated_state: tuple) -> dict:
         """
         Execute one controller step.
 
@@ -86,7 +81,7 @@ class Controller:
         readout : dict
             Latest decoded CAN inputs.
 
-        estimated_state : dict
+        estimated_state : tuple
             Current observer output. Not used by the manual controller.
 
         Returns
