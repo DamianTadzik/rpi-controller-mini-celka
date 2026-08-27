@@ -14,7 +14,8 @@ class Controller:
     The trajectory is assumed to be generated for a 100 Hz control loop.
     """
     def __init__(self):
-        trajectory_path = Path(__file__).parent / "matlab_trajectory_controller/test_trajectory.mat"
+        trajectory_path = Path(__file__).parent / "matlab_trajectory_controller/hydrofoil_actuators_trajectory_sqr_saq_sin_5REPS_ALL_TEST.mat"
+        # trajectory_path = Path(__file__).parent / "matlab_trajectory_controller/hydrofoil_actuators_trajectory_sqr_saq_sin_20REPS.mat"
 
         data = loadmat(trajectory_path)
         self.trajectory = data["trajectory"]
