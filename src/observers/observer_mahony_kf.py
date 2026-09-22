@@ -84,9 +84,14 @@ def safe_norm(v, eps=1e-12):
 
 from scipy.io import loadmat
 class Observer:
-    def __init__(self, params_file="boat_controller_parameters.mat"):
-        data = loadmat(params_file, simplify_cells=True)
-        self.params = data["ctrl_params"]
+    def __init__(self, params_file="/home/brzanpi/ws_minicelka/rpi-controller-mini-celka/src/observers/boat_controller_parameters.mat"):
+        try:
+            data = loadmat(params_file, simplify_cells=True)
+            self.params = data["ctrl_params"]
+            print(f"[observer] Parameters loaded successfully from: {params_file}")
+        except Exception as e:
+            print(f"[observer] Failed to load parameters: {e}")
+            raise
         self.DT = float(self.params["Ts"])
 
         # ToF timing
@@ -100,6 +105,13 @@ class Observer:
         # Heave KF
         self.xh = np.array([0.0, 0.0, 0.0])         # [z, z_dot, a_bias]
         self.Pz = np.diag([10.0, 10.0, 10.0])       # covariance 3x3
+
+        # GPS timing
+        self.t_gps_prev = None
+
+        # Velocity KF
+        self.xv = None   # [velocity, accel_bias]
+        self.Pv = None
 
     # =========================
     # Mahony update (from your MATLAB)
@@ -216,6 +228,85 @@ class Observer:
         self.xh = xh + K * (float(z_meas) - float(H @ xh))
         self.Pz = (np.eye(3) - np.outer(K, H)) @ Pz
 
+    def velocity_kf_update(self, accel_g, phi, theta, gps_speed, gps_new):
+        """
+        Forward WORLD velocity estimator.
+        State: [velocity, accel_bias]
+        """
+
+        Ts = float(self.params["Ts"])
+        g = float(self.params["g"])
+
+        # Same initialization as MATLAB
+        if self.xv is None:
+            self.xv = np.array([gps_speed, 0.0], dtype=float)
+            self.Pv = np.eye(2, dtype=float)
+
+        # BODY -> WORLD acceleration
+        cphi = cos(phi)
+        sphi = sin(phi)
+        cth = cos(theta)
+        sth = sin(theta)
+
+        R_x = np.array([
+            [1.0, 0.0,  0.0],
+            [0.0, cphi, -sphi],
+            [0.0, sphi,  cphi],
+        ])
+
+        R_y = np.array([
+            [ cth, 0.0, sth],
+            [ 0.0, 1.0, 0.0],
+            [-sth, 0.0, cth],
+        ])
+
+        R_BW = R_y @ R_x
+
+        aB = accel_g * g
+        aW = R_BW @ aB
+
+        ax = float(aW[0])
+
+        # Prediction
+        A = np.array([
+            [1.0, -Ts],
+            [0.0,  1.0],
+        ])
+
+        B = np.array([
+            Ts,
+            0.0,
+        ])
+
+        Q = np.asarray(
+            self.params["observer"]["velocity_KF"]["Q"],
+            dtype=float
+        )
+
+        self.xv = A @ self.xv + B * ax
+        self.Pv = A @ self.Pv @ A.T + Q
+
+        # GPS correction
+        if gps_new:
+            H = np.array([1.0, 0.0])
+
+            R = float(
+                self.params["observer"]["velocity_KF"]["R"]
+            )
+
+            S = float(H @ self.Pv @ H.T + R)
+            K = (self.Pv @ H.T) / S
+
+            self.xv = self.xv + K * (
+                float(gps_speed) - float(H @ self.xv)
+            )
+
+            self.Pv = (
+                np.eye(2) - np.outer(K, H)
+            ) @ self.Pv
+
+        return float(self.xv[0])
+
     def step(self, inputs):
         """Perform one observer step and return x_hat."""
 
@@ -243,33 +334,34 @@ class Observer:
         RR = float(inputs.get("DISTANCE_ACHTER_RIGHT", 0.0))
         status_RR = inputs.get("DISTANCE_ACHTER_RIGHT_STATUS", -1)
 
+        gps_speed = float(inputs.get("GPS_GROUND_SPEED", 0.0))
+        tGPS = inputs.get("GPS_MOTION_timestamp", None)
+        gps_new = (tGPS is not None) and (tGPS != self.t_gps_prev)
+        if gps_new:
+            self.t_gps_prev = tGPS
+
         # ==============================================================
         # Observer algorithm
         # ==============================================================
 
-        # Mahony
+        # Mahony attitude
         gyro_corr = self.mahony_update(gyro_rads, accel_g)
-
         phi, theta, psi = quat_to_euler_BW(self.quat)  # [rad]
         p, q, r = gyro_corr                            # [rad/s]
 
-        # Kalman
+        # Kalman heave
         self.kf_predict(accel_g)
-
-        # KF update (only when ToF arrives)
+        # KF heave update (only when ToF arrives)
         tF = inputs.get("DISTANCE_FORE_FEEDBACK_timestamp", None)
         new_front = (tF is not None) and (tF != self.t_tof_front_prev)
         if new_front:
             self.t_tof_front_prev = tF
-
         tR = inputs.get("DISTANCE_ACHTER_FEEDBACK_timestamp", None)
         new_rear = (tR is not None) and (tR != self.t_tof_rear_prev)
         if new_rear:
             self.t_tof_rear_prev = tR
-
         # Build full vectors in MATLAB order: [FL, FR, RL, RR]
         tof_mm = np.array([FL, FR, RL, RR], dtype=float)
-
         # Convert CAN status: 0=OK -> 1=good (simulation convention)
         tof_status = np.array([
             1 if status_FL == 0 else 0,
@@ -277,7 +369,6 @@ class Observer:
             1 if status_RL == 0 else 0,
             1 if status_RR == 0 else 0,
         ], dtype=int)
-
         # Only update when a NEW packet arrived for that pair
         can_update = np.array([
             1 if new_front else 0,  # FL
@@ -285,13 +376,20 @@ class Observer:
             1 if new_rear else 0,   # RL
             1 if new_rear else 0,   # RR
         ], dtype=int)
-
         use = (can_update == 1) & (tof_status == 1)
-
         for i in range(4):
             if use[i]:
                 z_meas = self.tof_to_z_i(i, tof_mm[i], phi, theta)  # i = 0..3
                 self.kf_update_z(z_meas, i)
+
+        # Kalman velocity
+        velocity = self.velocity_kf_update(
+            accel_g,
+            phi,
+            theta,
+            gps_speed,
+            gps_new
+        )
 
         # ==============================================================
         # Outputs packing
@@ -300,6 +398,7 @@ class Observer:
         z_dot = self.xh[1]
 
         return (
+            float(velocity),  # forward WORLD velocity [m/s]
             float(z),       # heave position [m] (NED +down)
             float(z_dot),   # heave velocity [m/s]
             float(phi),     # roll  [rad]

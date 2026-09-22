@@ -207,6 +207,7 @@ class ControlLoop:
                 ( front_left_setpoint, front_right_setpoint, rear_setpoint ) = outputs
 
             (
+                velocity_mps,
                 z_m,
                 z_dot_mps,
                 phi_rad,
@@ -226,6 +227,7 @@ class ControlLoop:
                 observer_execution_ns,
                 controller_execution_ns,
                 # Estimated state
+                velocity_mps,
                 z_m,
                 z_dot_mps,
                 phi_rad,

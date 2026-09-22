@@ -46,6 +46,7 @@ SCHEMAS = {
             "observer_execution_ns",
             "controller_execution_ns",
 
+            "estimated_state/velocity_mps",
             "estimated_state/z_m",
             "estimated_state/z_dot_mps",
             "estimated_state/phi_rad",
