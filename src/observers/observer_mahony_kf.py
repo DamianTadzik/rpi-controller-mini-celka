@@ -82,58 +82,12 @@ def safe_norm(v, eps=1e-12):
     n = float(np.linalg.norm(v))
     return max(n, eps)
 
-
+from scipy.io import loadmat
 class Observer:
-    def __init__(self):
-        # Fixed observer update rate (seconds): 0.01 -> 100 Hz
-        self.DT = 0.01
-
-        # Load the parameters from a MATLAB file or define them here
-        self.params = {
-            # fixed observer rate
-            "Ts": self.DT,
-            "g": 9.80665,
-
-            # -------------------------
-            # ToF sensor geometry (BODY frame, meters)
-            # -------------------------
-            "tof": {
-                "pos_FL_B": np.array([+225, -182, -37], dtype=float) * 1e-3,
-                "pos_FR_B": np.array([+225, +182, -37], dtype=float) * 1e-3,
-                "pos_RL_B": np.array([-616, -182, -37], dtype=float) * 1e-3,
-                "pos_RR_B": np.array([-616, +182, -37], dtype=float) * 1e-3,
-            },
-
-            # -------------------------
-            # Observer parameters
-            # -------------------------
-            "observer": {
-                # Heave Kalman Filter
-                "heave_KF": {
-                    # "R": 4.864859165974720e-05,
-                    # per-sensor measurement variance
-                    "R_i": [
-                        4.864859165974720e-05 * 4 * 1e3,  # FL
-                        4.864859165974720e-05 * 4 * 1e3,  # FR
-                        4.864859165974720e-05 * 4 * 1e3,  # RL
-                        4.864859165974720e-05 * 4 * 1e3,  # RR
-                    ],
-                    "Q": np.diag([
-                        1e-6,  # z
-                        1e-4,  # z_dot
-                        1e-3,  # accel bias
-                    ]),
-                },
-
-                # Mahony attitude filter
-                "attitude": {
-                    "Kp": 1.2,
-                    "Ki": 0.01,
-                    "acc_norm_min": 0.1,
-                    "acc_norm_max": 1.1,
-                },
-            },
-        }
+    def __init__(self, params_file="boat_controller_parameters.mat"):
+        data = loadmat(params_file, simplify_cells=True)
+        self.params = data["ctrl_params"]
+        self.DT = float(self.params["Ts"])
 
         # ToF timing
         self.t_tof_front_prev = None
@@ -162,8 +116,8 @@ class Observer:
         Ts = float(self.params["Ts"])
 
         a_norm = float(np.linalg.norm(accel_g))
-        use_acc = (a_norm > float(att["acc_norm_min"])) and (a_norm < float(att["acc_norm_max"]))
-
+        acc_norm_error = abs(a_norm - 1.0)
+        use_acc = acc_norm_error < float(att["acc_norm_tolerance"])
         if use_acc:
             a = accel_g / max(a_norm, 1e-12)
 
@@ -213,9 +167,9 @@ class Observer:
         elif i == 1:
             rB = np.array(tof_pos["pos_FR_B"], dtype=float)
         elif i == 2:
-            rB = np.array(tof_pos["pos_RL_B"], dtype=float)
+            rB = np.array(tof_pos["pos_AL_B"], dtype=float)
         elif i == 3:
-            rB = np.array(tof_pos["pos_RR_B"], dtype=float)
+            rB = np.array(tof_pos["pos_AR_B"], dtype=float)
         else:
             raise ValueError("Invalid ToF index")
 
@@ -232,7 +186,7 @@ class Observer:
         # vertical accel in world frame (NED +down)
         aB = accel_g * g
         aW = quat_rotate(self.quat, aB)
-        a_z = aW[2] - g - xh[2]
+        a_z = aW[2] - g
 
         A = np.array([
             [1.0, Ts, -0.5*Ts*Ts],
