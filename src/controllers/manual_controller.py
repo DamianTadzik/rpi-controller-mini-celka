@@ -110,6 +110,10 @@ class Controller:
         right_setpoint = map(right_command, self.command_min, self.command_max, self.foil_angle_min_deg, self.foil_angle_max_deg)
         rear_setpoint = map(rear_command, self.command_min, self.command_max, self.foil_angle_min_deg, self.foil_angle_max_deg)
 
+        # ## TEST try to read back last auto control commands
+        # AUTO_CONTROL_REAR_SETPOINT = readout.get("AUTO_CONTROL_REAR_SETPOINT", 0.0)
+        # print(f"{rear_setpoint=}\t{AUTO_CONTROL_REAR_SETPOINT=}")
+
         # CAN outputs
         return (left_setpoint, right_setpoint, rear_setpoint)
         

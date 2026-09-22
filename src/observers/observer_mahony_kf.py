@@ -14,6 +14,7 @@ Inputs:
 
 Outputs:
 - Estimated state x_hat:
+    x_dot   [m/s]
     z       [m]     (NED +down)
     z_dot   [m/s]
     phi     [rad]   roll
@@ -112,6 +113,15 @@ class Observer:
         # Velocity KF
         self.xv = None   # [velocity, accel_bias]
         self.Pv = None
+
+        # Actuator estimator
+        act = self.params["actuator_model"]
+        self.actuator_Td = np.asarray(act["Td"], dtype=float)
+        self.actuator_Ld = int(act["Ld"])
+        self.actuator_alpha_min = np.asarray(act["alpha_min"], dtype=float)
+        self.actuator_alpha_max = np.asarray(act["alpha_max"], dtype=float)
+        self.delta_hat = None
+        self.delay_buffer = None
 
     # =========================
     # Mahony update (from your MATLAB)
@@ -307,6 +317,39 @@ class Observer:
 
         return float(self.xv[0])
 
+    def actuators_estimator_update(self, u):
+        u = np.asarray(u, dtype=float).reshape(3)
+        # Initialization
+        if self.delta_hat is None:
+            self.delta_hat = u.copy()
+            self.delay_buffer = np.tile(
+                u.reshape(3, 1),
+                (1, self.actuator_Ld)
+            )
+        # Saturation
+        u = np.clip(
+            u,
+            self.actuator_alpha_min,
+            self.actuator_alpha_max
+        )
+        # Pure transport delay
+        u_delayed = self.delay_buffer[:, -1].copy()
+        if self.actuator_Ld > 1:
+            self.delay_buffer[:, 1:] = self.delay_buffer[:, :-1].copy()
+
+        self.delay_buffer[:, 0] = u
+        # First-order actuator dynamics
+        self.delta_hat = (
+            self.actuator_Td * self.delta_hat
+            + (1.0 - self.actuator_Td) * u_delayed
+        )
+        # Same ordering as MATLAB delay_buffer(:)
+        delay_states = self.delay_buffer.reshape(
+            -1,
+            order="F"
+        ).copy()
+        return self.delta_hat.copy(), delay_states
+
     def step(self, inputs):
         """Perform one observer step and return x_hat."""
 
@@ -328,17 +371,33 @@ class Observer:
         status_FL = inputs.get("DISTANCE_FORE_LEFT_STATUS", -1)  # 0=OK anything else=error
         FR = float(inputs.get("DISTANCE_FORE_RIGHT", 0.0))
         status_FR = inputs.get("DISTANCE_FORE_RIGHT_STATUS", -1)
+        # KF heave update (only when ToF arrives)
+        tF = inputs.get("DISTANCE_FORE_FEEDBACK_timestamp", None)
+        new_front = (tF is not None) and (tF != self.t_tof_front_prev)
+        if new_front:
+            self.t_tof_front_prev = tF
 
         RL = float(inputs.get("DISTANCE_ACHTER_LEFT", 0.0))
         status_RL = inputs.get("DISTANCE_ACHTER_LEFT_STATUS", -1)
         RR = float(inputs.get("DISTANCE_ACHTER_RIGHT", 0.0))
         status_RR = inputs.get("DISTANCE_ACHTER_RIGHT_STATUS", -1)
+        # KF heave update (only when ToF arrives)
+        tR = inputs.get("DISTANCE_ACHTER_FEEDBACK_timestamp", None)
+        new_rear = (tR is not None) and (tR != self.t_tof_rear_prev)
+        if new_rear:
+            self.t_tof_rear_prev = tR
 
         gps_speed = float(inputs.get("GPS_GROUND_SPEED", 0.0))
         tGPS = inputs.get("GPS_MOTION_timestamp", None)
         gps_new = (tGPS is not None) and (tGPS != self.t_gps_prev)
         if gps_new:
             self.t_gps_prev = tGPS
+
+        u_actuator = np.array([
+            float(inputs.get("AUTO_CONTROL_FRONT_LEFT_SETPOINT", 0.0)),
+            float(inputs.get("AUTO_CONTROL_FRONT_RIGHT_SETPOINT", 0.0)),
+            float(inputs.get("AUTO_CONTROL_REAR_SETPOINT", 0.0)),
+        ], dtype=float)
 
         # ==============================================================
         # Observer algorithm
@@ -351,15 +410,6 @@ class Observer:
 
         # Kalman heave
         self.kf_predict(accel_g)
-        # KF heave update (only when ToF arrives)
-        tF = inputs.get("DISTANCE_FORE_FEEDBACK_timestamp", None)
-        new_front = (tF is not None) and (tF != self.t_tof_front_prev)
-        if new_front:
-            self.t_tof_front_prev = tF
-        tR = inputs.get("DISTANCE_ACHTER_FEEDBACK_timestamp", None)
-        new_rear = (tR is not None) and (tR != self.t_tof_rear_prev)
-        if new_rear:
-            self.t_tof_rear_prev = tR
         # Build full vectors in MATLAB order: [FL, FR, RL, RR]
         tof_mm = np.array([FL, FR, RL, RR], dtype=float)
         # Convert CAN status: 0=OK -> 1=good (simulation convention)
@@ -391,6 +441,9 @@ class Observer:
             gps_new
         )
 
+        # Actuator estimator
+        delta_hat, delay_states = self.actuators_estimator_update(u_actuator)
+
         # ==============================================================
         # Outputs packing
         # ==============================================================
@@ -407,4 +460,12 @@ class Observer:
             float(p),       # roll rate  [rad/s]
             float(q),       # pitch rate [rad/s]
             float(r),       # yaw rate   [rad/s]
+
+            # actuator states
+            float(delta_hat[0]),   # delta_FL
+            float(delta_hat[1]),   # delta_FR
+            float(delta_hat[2]),   # delta_R
+
+            # transport-delay states
+            *[float(v) for v in delay_states],
         )

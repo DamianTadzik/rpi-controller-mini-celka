@@ -55,6 +55,9 @@ SCHEMAS = {
             "estimated_state/p_radps",
             "estimated_state/q_radps",
             "estimated_state/r_radps",
+            "estimated_state/delta_FL_deg",
+            "estimated_state/delta_FR_deg",
+            "estimated_state/delta_R_deg",
             
             "outputs/front_left_setpoint",
             "outputs/front_right_setpoint",

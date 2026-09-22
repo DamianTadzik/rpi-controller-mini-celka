@@ -216,6 +216,10 @@ class ControlLoop:
                 p_radps,
                 q_radps,
                 r_radps,
+                delta_FL_deg,
+                delta_FR_deg,
+                delta_R_deg,
+                *delay_states,
             ) = estimated_state
             
             record = [
@@ -236,7 +240,11 @@ class ControlLoop:
                 p_radps,
                 q_radps,
                 r_radps,
-                # Three outputs
+                # Estimated actuator states
+                delta_FL_deg,
+                delta_FR_deg,
+                delta_R_deg,
+                # Three output commands
                 front_left_setpoint,
                 front_right_setpoint,
                 rear_setpoint,
