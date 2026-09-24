@@ -207,4 +207,4 @@ class Controller:
             # u(2) = (collective - differential) * (1 - lambda) + (lambda) * u(2);
 
         # Return actuator command in degrees
-        return (saturate(float(u[0]), -6.0, 12.0), saturate(float(u[1]), -6.0, 12.0), saturate(float(u[2]), 6.0, 12.0))
+        return (saturate(float(u[0]), -6.0, 12.0), saturate(float(u[1]), -6.0, 12.0), saturate(float(u[2]), -6.0, 12.0))
