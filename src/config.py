@@ -32,7 +32,7 @@ LOGGER_CONTROL_SOCKET = "/tmp/minicelka_logger.sock"
 OBSERVER_MODULE = "observers.observer_mahony_kf"
 MANUAL_CONTROLLER_MODULE = "controllers.manual_controller"
 AUTO_CONTROLLER_MODULE = (
-    "controllers.matlab_trajectory_controller"
+    "controllers.LQ_controller"
 )
 # Fixed observer/controller loop rate: 100 Hz
 CONTROL_PERIOD_S = 0.01

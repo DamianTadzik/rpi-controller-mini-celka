@@ -1,5 +1,5 @@
 from math import radians
-
+from controllers.control_helpers import saturate
 import numpy as np
 from scipy.io import loadmat
 
@@ -213,4 +213,4 @@ class Controller:
             # u(2) = (collective - differential) * (1 - lambda) + (lambda) * u(2);
 
         # Return actuator command in degrees
-        return (float(u[0]), float(u[1]), float(u[2]))
+        return (saturate(float(u[0]), -6, 12), saturate(float(u[1]), -6, 12), saturate(float(u[2]), -6, 12))
