@@ -129,7 +129,7 @@ class Observer:
             raise
         self.DT = float(self.params["Ts"])
 
-        replay_path = Path(params_file).parent / "observer_replay_inputs.mat"
+        replay_path = Path(params_file).parent / "observer_controller_simulation_60s.mat"
         try:
             replay_data = loadmat(replay_path, simplify_cells=True)
             self.replay = replay_data["s"]
@@ -501,6 +501,8 @@ class Observer:
             self.replay_length - 1
         )
         self.replay_sample += 1
+        if (k+1) % 100 == 0:
+            print(f"{k=}")
 
         gyro_dps = np.asarray(
             self.replay["gyro"][k, :],

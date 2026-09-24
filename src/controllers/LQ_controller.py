@@ -150,7 +150,6 @@ class Controller:
         # Integrator on off switch with hysteresis
         V_DISABLE = 1.9
         V_ENABLE = 2.4
-
         if velocity < V_DISABLE:
             self.xi[:] = 0.0
             self.integral_enabled = False
@@ -183,17 +182,12 @@ class Controller:
             # x0(6) = x0(6) + deg2rad(5); % nose up rate reference xd
             pass
 
-        xi_ = self.xi
-
         # State error
         dx = x - x0
-
         # integral part extension
-        dx = np.concatenate([dx, xi_])
-
+        dx = np.concatenate([dx, self.xi])
         # LQ control
         du = -K @ dx
-
         # Full actuator command
         u = u0 + du
 
@@ -205,12 +199,12 @@ class Controller:
             # u(3) = u(3) - (1-lambda) * u0(3); % deg bias during take off
             u[2] = lambda_ * u[2]
 
-            collective = 4.0
-            differential = -1.0 * np.rad2deg(x[2])
+            collective = +3.0
+            differential = -1.2 * np.rad2deg(x[2]) - 0.1 * np.rad2deg(x[3])
             u[0] = collective + differential
             u[1] = collective - differential
             # u(1) = (collective + differential) * (1 - lambda) + (lambda) * u(1);
             # u(2) = (collective - differential) * (1 - lambda) + (lambda) * u(2);
 
         # Return actuator command in degrees
-        return (saturate(float(u[0]), -6, 12), saturate(float(u[1]), -6, 12), saturate(float(u[2]), -6, 12))
+        return (saturate(float(u[0]), -6.0, 12.0), saturate(float(u[1]), -6.0, 12.0), saturate(float(u[2]), 6.0, 12.0))
