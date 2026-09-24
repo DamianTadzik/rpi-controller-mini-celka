@@ -1,26 +1,49 @@
 #!/usr/bin/env python3
 """
 Mahony + Kalman Filter observer for state estimation.
-This observer processes IMU and TOF sensors data to estimate
-the vehicle's orientation and position.
-It combines the Mahony filter for attitude estimation
-with a Kalman filter for height estimation.
 
-This Kalman filter is based on the MATLAB implementation.
+This module estimates the boat motion from IMU, ToF, GPS, and actuator inputs.
+It combines a quaternion-based Mahony attitude observer with two Kalman filters:
 
-Inputs:
-- IMU gyro [deg/s] and accel [g] in BODY frame, NED convention (+Z down)
-- ToF distances [mm] for 4 sensors: FL, FR, RL, RR
+- a heave (vertical position) state estimator using the four ToF sensors,
+- a forward velocity estimator using body acceleration and GPS speed,
+- and a simple actuator-state estimator for delayed actuator commands.
 
-Outputs:
-- Estimated state x_hat:
-    x_dot   [m/s]
-    z       [m]     (NED +down)
-    z_dot   [m/s]
-    phi     [rad]   roll
-    theta   [rad]   pitch
-    psi     [rad]   yaw (unobservable here, kept for completeness)
-    p,q,r   [rad/s] corrected angular rates (bias removed)
+Coordinate and unit conventions
+------------------------------
+- IMU accelerometer readings are treated as g units in the body frame.
+- IMU gyroscope readings are provided in deg/s and converted internally to rad/s.
+- NED convention is used: +Z points down, so vertical displacement is measured as a
+  positive downwards distance.
+- ToF distances are in mm, converted to metres internally before use.
+- Sensor ordering in the implementation is [FL, FR, RL, RR].
+
+High-level output tuple
+----------------------
+The `step()` method returns a flattened state tuple:
+
+    velocity      [m/s]    forward world velocity
+    z             [m]      heave position (NED +down)
+    z_dot         [m/s]    heave velocity
+    phi           [rad]    roll
+    theta         [rad]    pitch
+    psi           [rad]    yaw
+    p, q, r       [rad/s]  corrected body angular rates
+    delta_hat     [var]    estimated actuator states [FL, FR, RR]
+    delay_states  [var]    actuator transport-delay state vector
+
+The returned tuple is intentionally compatible with the rest of the runtime and is
+not a single structured state vector object.
+
+Implementation notes
+--------------------
+- The quaternion uses the convention [qw, qx, qy, qz].
+- The yaw angle is kept for completeness even though it is not directly observable
+  from the current sensor set.
+- ToF updates are accepted only when the corresponding CAN frame timestamp changes
+  and the status flag indicates a valid reading (status == 0).
+- The observer is based on the MATLAB implementation that this project originally
+  used, while keeping the Python code and data flow consistent with the runtime.
 """
 
 from math import sin, cos, atan2, sqrt, asin
@@ -85,6 +108,15 @@ def safe_norm(v, eps=1e-12):
 
 from scipy.io import loadmat
 class Observer:
+    """Observer wrapper for the Mahony attitude estimator and the runtime KFs.
+
+    The class stores all calibration and model parameters loaded from the MATLAB
+    parameter file, including the fixed sampling time, heave-KF tuning, velocity-KF
+    tuning, and actuator model parameters. It keeps internal state for the current
+    quaternion estimate, vertical-position Kalman filter, forward-velocity filter,
+    and delayed actuator estimates.
+    """
+
     def __init__(self, params_file="/home/brzanpi/ws_minicelka/rpi-controller-mini-celka/src/observers/boat_controller_parameters.mat"):
         try:
             data = loadmat(params_file, simplify_cells=True)
@@ -167,9 +199,23 @@ class Observer:
         return w
 
     def tof_to_z_i(self, i, tof_mm, phi, theta):
-        """
-        i: 0..3 -> FL, FR, RL, RR
-        tof_mm: scalar
+        """Convert a single ToF distance reading into a heave measurement.
+
+        Parameters
+        ----------
+        i : int
+            Sensor index in the implementation order [FL, FR, RL, RR].
+        tof_mm : float
+            Raw ToF distance in millimetres.
+        phi, theta : float
+            Roll and pitch estimates used to transform the sensor offsets into the
+            world frame.
+
+        Returns
+        -------
+        float
+            Vertical displacement z in the NED +down convention, expressed as a
+            measurement for the heave Kalman filter.
         """
         d = float(tof_mm) * 1e-3  # mm -> m
 
@@ -199,6 +245,12 @@ class Observer:
         return -d * ez - float(rW[2])  # NED +down
 
     def kf_predict(self, accel_g):
+        """Predict the heave-state estimate from the current acceleration.
+
+        State vector: [z, z_dot, a_bias], with z using the NED +down convention.
+        The transform body->world is performed through the current quaternion, and
+        the model uses a vertical acceleration term a_z = a_Wz - g.
+        """
         Ts = self.params["Ts"]
         g = self.params["g"]
 
@@ -224,6 +276,11 @@ class Observer:
         self.Pz = A @ Pz @ A.T + Q
 
     def kf_update_z(self, z_meas, sensor_idx):
+        """Apply a scalar measurement update to the heave Kalman filter.
+
+        sensor_idx is the ToF sensor index in [FL, FR, RL, RR] order and selects the
+        corresponding measurement noise value `R_i[sensor_idx]`.
+        """
         xh = self.xh
         Pz = self.Pz
 
@@ -239,9 +296,12 @@ class Observer:
         self.Pz = (np.eye(3) - np.outer(K, H)) @ Pz
 
     def velocity_kf_update(self, accel_g, phi, theta, gps_speed, gps_new):
-        """
-        Forward WORLD velocity estimator.
-        State: [velocity, accel_bias]
+        """Update the forward world-velocity estimate.
+
+        State vector: [velocity, accel_bias].
+        The acceleration is transformed from body coordinates to world coordinates
+        using the roll and pitch rotation, then integrated with a constant-bias model.
+        GPS speed is used as a measurement update when a new packet is detected.
         """
 
         Ts = float(self.params["Ts"])
@@ -318,6 +378,12 @@ class Observer:
         return float(self.xv[0])
 
     def actuators_estimator_update(self, u):
+        """Estimate the actuator states with delayed command handling.
+
+        The model keeps a transport-delay buffer and a first-order actuator dynamics
+        update. The returned `delta_hat` uses the same ordering as the runtime input
+        commands: [FL, FR, RR].
+        """
         u = np.asarray(u, dtype=float).reshape(3)
         # Initialization
         if self.delta_hat is None:
@@ -351,7 +417,20 @@ class Observer:
         return self.delta_hat.copy(), delay_states
 
     def step(self, inputs):
-        """Perform one observer step and return x_hat."""
+        """Perform one observer step and return the runtime state tuple.
+
+        Parameters
+        ----------
+        inputs : dict
+            Dictionary of CAN/IMU values. Expected keys include accelerometer and
+            gyroscope readings, ToF distances and statuses, GPS speed, and actuator
+            setpoints.
+
+        Returns
+        -------
+        tuple
+            (velocity, z, z_dot, phi, theta, psi, p, q, r, delta_hat..., delay_states...)
+        """
 
         # ==============================================================
         # Inputs readout, and vector forming
