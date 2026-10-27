@@ -146,6 +146,11 @@ class Observer:
         self.xv = None   # [velocity, accel_bias]
         self.Pv = None
 
+        self.Q_velocity = np.asarray(
+            self.params["observer"]["velocity_KF"]["Q"],
+            dtype=float
+        ).copy()
+
         # Actuator estimator
         act = self.params["actuator_model"]
         self.actuator_Td = np.asarray(act["Td"], dtype=float)
@@ -260,7 +265,7 @@ class Observer:
         # vertical accel in world frame (NED +down)
         aB = accel_g * g
         aW = quat_rotate(self.quat, aB)
-        a_z = aW[2] - g
+        a_z = -aW[2] + g
 
         A = np.array([
             [1.0, Ts, -0.5*Ts*Ts],
@@ -335,7 +340,7 @@ class Observer:
         aB = accel_g * g
         aW = R_BW @ aB
 
-        ax = float(aW[0])
+        ax = -float(aW[0])
 
         # Prediction
         A = np.array([
@@ -348,10 +353,7 @@ class Observer:
             0.0,
         ])
 
-        Q = np.asarray(
-            self.params["observer"]["velocity_KF"]["Q"],
-            dtype=float
-        )
+        Q = self.Q_velocity * 25
 
         self.xv = A @ self.xv + B * ax
         self.Pv = A @ self.Pv @ A.T + Q
@@ -448,8 +450,10 @@ class Observer:
 
         FL = float(inputs.get("DISTANCE_FORE_LEFT", 0.0))
         status_FL = inputs.get("DISTANCE_FORE_LEFT_STATUS", -1)  # 0=OK anything else=error
+        # status_FL = status_FL or not(2 < FL < 245)
         FR = float(inputs.get("DISTANCE_FORE_RIGHT", 0.0))
         status_FR = inputs.get("DISTANCE_FORE_RIGHT_STATUS", -1)
+        # status_FR = status_FR or not(2 < FR < 245)
         # KF heave update (only when ToF arrives)
         tF = inputs.get("DISTANCE_FORE_FEEDBACK_timestamp", None)
         new_front = (tF is not None) and (tF != self.t_tof_front_prev)
@@ -458,8 +462,10 @@ class Observer:
 
         RL = float(inputs.get("DISTANCE_ACHTER_LEFT", 0.0))
         status_RL = inputs.get("DISTANCE_ACHTER_LEFT_STATUS", -1)
+        # status_RL = status_RL or not(2 < RL < 245)
         RR = float(inputs.get("DISTANCE_ACHTER_RIGHT", 0.0))
         status_RR = inputs.get("DISTANCE_ACHTER_RIGHT_STATUS", -1)
+        # status_RR = status_RR or not(2 < RR < 245)
         # KF heave update (only when ToF arrives)
         tR = inputs.get("DISTANCE_ACHTER_FEEDBACK_timestamp", None)
         new_rear = (tR is not None) and (tR != self.t_tof_rear_prev)

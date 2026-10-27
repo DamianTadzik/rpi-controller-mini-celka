@@ -1,5 +1,5 @@
 from math import radians
-from controllers.control_helpers import saturate
+from controllers.control_helpers import saturate, map
 import numpy as np
 from scipy.io import loadmat
 
@@ -101,6 +101,16 @@ class Controller:
         tuple
             (front_left_setpoint, front_right_setpoint, rear_setpoint)
         """
+
+        steering = readout.get("RADIO_STEERING", 0.0)
+        if steering >= 10.0:
+            roll_reference_deg = map(steering, 10, 1000, 0, 3)
+        elif steering <= -10.0:
+            roll_reference_deg = map(steering, -10, -1000, 0, -3)
+        else:
+            roll_reference_deg = 0
+        print(f"{steering=}\n{roll_reference_deg=}")
+
         # Apply commanded references
         # reference:
         # [z_ref;
@@ -108,7 +118,7 @@ class Controller:
         #  theta_ref]
         reference = np.array([
             float(readout.get("REFERENCE_Z", -0.1)),
-            float(readout.get("REFERENCE_PHI", 0.0)),
+            np.deg2rad(roll_reference_deg),
             float(readout.get("REFERENCE_THETA", 0.0)),
         ], dtype=float)
 
@@ -148,8 +158,8 @@ class Controller:
         # end
 
         # Integrator on off switch with hysteresis
-        V_DISABLE = 1.9
-        V_ENABLE = 2.4
+        V_DISABLE = 1.7
+        V_ENABLE = 2.1
         if velocity < V_DISABLE:
             self.xi[:] = 0.0
             self.integral_enabled = False

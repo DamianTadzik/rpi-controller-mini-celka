@@ -15,3 +15,6 @@ systemctl status minicelka_runtime.service
 #### python
 source /home/brzanpi/ws_minicelka/venv/bin/activate
 python /home/brzanpi/ws_minicelka/rpi-controller-mini-celka/src/log_rotate.py
+
+
+ls -lh rpi-controller-mini-celka/src/logs_runtime/

@@ -160,6 +160,11 @@ class Observer:
         self.xv = None   # [velocity, accel_bias]
         self.Pv = None
 
+        self.Q_velocity = np.asarray(
+            self.params["observer"]["velocity_KF"]["Q"],
+            dtype=float
+        ).copy()
+
         # Actuator estimator
         act = self.params["actuator_model"]
         self.actuator_Td = np.asarray(act["Td"], dtype=float)
@@ -274,7 +279,7 @@ class Observer:
         # vertical accel in world frame (NED +down)
         aB = accel_g * g
         aW = quat_rotate(self.quat, aB)
-        a_z = aW[2] - g
+        a_z = -aW[2] + g
 
         A = np.array([
             [1.0, Ts, -0.5*Ts*Ts],
@@ -349,7 +354,7 @@ class Observer:
         aB = accel_g * g
         aW = R_BW @ aB
 
-        ax = float(aW[0])
+        ax = -float(aW[0])
 
         # Prediction
         A = np.array([
@@ -362,10 +367,7 @@ class Observer:
             0.0,
         ])
 
-        Q = np.asarray(
-            self.params["observer"]["velocity_KF"]["Q"],
-            dtype=float
-        )
+        Q = self.Q_velocity * 1
 
         self.xv = A @ self.xv + B * ax
         self.Pv = A @ self.Pv @ A.T + Q
