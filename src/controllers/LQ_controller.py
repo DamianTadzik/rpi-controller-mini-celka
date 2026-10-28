@@ -111,15 +111,17 @@ class Controller:
             roll_reference_deg = 0
         print(f"{steering=}\n{roll_reference_deg=}")
 
+        pitch_reference_deg = 0.0
+
         # Apply commanded references
         # reference:
         # [z_ref;
         #  phi_ref;
         #  theta_ref]
         reference = np.array([
-            float(readout.get("REFERENCE_Z", -0.1)),
+            -0.08,
             np.deg2rad(roll_reference_deg),
-            float(readout.get("REFERENCE_THETA", 0.0)),
+            np.deg2rad(pitch_reference_deg)
         ], dtype=float)
 
         # Observer output:

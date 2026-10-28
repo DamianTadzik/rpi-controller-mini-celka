@@ -31,7 +31,8 @@ LOGGER_CONTROL_SOCKET = "/tmp/minicelka_logger.sock"
 # Controller, observer
 OBSERVER_MODULE = "observers.observer_mahony_kf"
 # OBSERVER_MODULE = "observers.observer_test_inputs"
-MANUAL_CONTROLLER_MODULE = "controllers.manual_controller"
+#MANUAL_CONTROLLER_MODULE = "controllers.manual_controller"
+MANUAL_CONTROLLER_MODULE = "controllers.MPCI_controller"
 AUTO_CONTROLLER_MODULE = (
     "controllers.LQ_controller"
     # "controllers.MPC_controller"
