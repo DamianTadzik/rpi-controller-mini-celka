@@ -129,7 +129,8 @@ class Observer:
             raise
         self.DT = float(self.params["Ts"])
 
-        replay_path = Path(params_file).parent / "observer_controller_simulation_60s.mat"
+        # replay_path = Path(params_file).parent / "observer_controller_simulation_60s.mat"
+        replay_path = Path(params_file).parent / "observer_controller_simulation_60s_MPC.mat"
         try:
             replay_data = loadmat(replay_path, simplify_cells=True)
             self.replay = replay_data["s"]
